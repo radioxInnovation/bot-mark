@@ -21,7 +21,7 @@ setuptools.setup(
     description="BotMark – Define, run, and document LLM chatbots in plain Markdown. Framework for executable, portable, and LLM-agnostic chatbot workflows.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/deinuser/botmark",
+    url="https://www.radiox-innovation.de/",
     packages=setuptools.find_packages(),
     include_package_data=True,
     classifiers=[

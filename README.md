@@ -24,7 +24,7 @@ It enables a **single-source-of-truth** approach: chatbot logic, user guidance, 
 You can install **BotMark** via pip:
 
 ```bash
-pip install git+https://github.com/radioxInnovation/bot-mark.git
+pip install botmark
 ```
 
 > Requires **Python 3.11+**
