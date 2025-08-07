@@ -118,6 +118,9 @@ class BotMarkAgent(Agent[Any, Any]):
 class BotManager:
 
     def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None, bot_dir: str = ".",  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_system_prompt_fallback: bool = False ):
+        if not os.path.isdir(bot_dir):
+            raise FileNotFoundError(f"Bot directory '{bot_dir}' does not exist.")
+
         self.bot_dir = bot_dir
         self.adapt_payload = adapt_payload
         self.response_parser = response_parser
@@ -157,8 +160,7 @@ class BotManager:
 
     def get_agent_from_model_name( self, model_name ):
         model_data = get_model( model_name, self.bot_dir)
-        agent = self.get_agent( model_data )
-        return agent
+        return  self.get_agent( model_data ) if model_data else None
 
     def get_tests(self):
         tests = [{ "model": "", "tests": self.agent.get_tests()}]  if self.agent else []
