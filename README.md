@@ -19,6 +19,16 @@ It enables a **single-source-of-truth** approach: chatbot logic, user guidance, 
 
 ---
 
+## 📦 Installation
+
+You can install **BotMark** via pip:
+
+```bash
+pip install git+https://github.com/radioxInnovation/bot-mark.git
+```
+
+> Requires **Python 3.11+**
+
 ## 📘 What is BotMark?
 
 BotMark is a format and Python runtime for defining chatbots declaratively.  
@@ -81,10 +91,10 @@ bot = BotManager(default_model="foo", bot_dir="bots/")  # loads bots/foo.md
 
 
 # Option 2: Use file-like object (e.g. StringIO)
-bot = BotManager(default_model=io.StringIO("""... your botmark code here ..."""))
+bot = BotManager(default_model=io.StringIO("```markdown {#response}\nHello World!\n```"))
 
 msg = {
-  "messages": [{ "role": "user", "content": "What is 2 + 2?" }]
+  "messages": [{ "role": "user", "content": "Hello" }]
 }
 print(bot.respond(msg))
 ```
@@ -104,7 +114,7 @@ bot = BotManager(allow_system_prompt_fallback=True)
 msg = {
   "model": "",  # or missing
   "messages": [
-    { "role": "system", "content": "---\ntitle: InlineBot\ninfo: dynamic definition\n..." },
+    { "role": "system", "content": "```markdown {#response}\nHello World!\n```" },
     { "role": "user", "content": "Hello" }
   ]
 }
@@ -125,8 +135,8 @@ bot = BotManager(bot_dir="bots/", allow_system_prompt_fallback=True)
 msg = {
   "model": "nonexistent-model",  # fallback to system prompt
   "messages": [
-    { "role": "system", "content": "---\ntitle: TempBot\n..." },
-    { "role": "user", "content": "How does this bot work?" }
+    { "role": "system", "content": "```markdown {#response}\nHello World!\n```" },
+    { "role": "user", "content": "Hello" }
   ]
 }
 print(bot.respond(msg))
