@@ -153,15 +153,6 @@ To allow fallback to an inline system prompt, use:
 BotManager(allow_system_prompt_fallback=True)
 ```
 
-
-
-
-
-
-
-
-
-
 ## 🌐 LLM Agnostic
 
 BotMark does not rely on a specific LLM.
