@@ -78,9 +78,10 @@ class BotMarkAgent(Agent[Any, Any]):
             active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
             active_prompt = active_blocks.get("prompt")
             final_query = render_block(active_prompt, {"QUERY": user_text} ) if active_prompt else user_text
-            query_objects = parser.parse_to_json( final_query ) 
-            query_images = get_images( query_objects["images"], lambda x: True )
-            query_links, _ = process_links( query_objects["links"], lambda x: True )
+
+            query_objects = parser.parse_to_json( final_query ) if active_header.get("inspect_user_prompt", False) == True else {}
+            query_images = get_images( query_objects.get("images", []), lambda x: True )
+            query_links, _ = process_links( query_objects.get("links", []), lambda x: True )
             active_system = render_named_block( "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {} )
 
             answer = try_answer( active_blocks, active_system, active_header, VERSION, INFO, final_query, VENV_BASE_DIR, topics )
