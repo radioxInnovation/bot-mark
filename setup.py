@@ -4,7 +4,7 @@ import re
 
 # Version aus __init__.py lesen
 def find_version():
-    with open(os.path.join("chatmark", "__init__.py"), encoding="utf-8") as f:
+    with open(os.path.join("botmark", "__init__.py"), encoding="utf-8") as f:
         content = f.read()
     match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", content, re.M)
     if match:
