@@ -66,7 +66,7 @@ Hello World 🌍
 from botmark import BotManager
 
 # Load all bot models from a folder
-bot = BotManager(bot_dir="bots/")  # bots/foo.md → model: "foo"
+bot = BotManager(bot_dir=".")  # ./foo.md → model: "foo"
 
 msg = {
   "model": "foo",
@@ -87,7 +87,7 @@ from botmark import BotManager
 import io
 
 # Option 1: Use model name (requires bot_dir)
-bot = BotManager(default_model="foo", bot_dir="bots/")  # loads bots/foo.md
+bot = BotManager(default_model="foo", bot_dir=".")  # loads ./foo.md
 
 
 # Option 2: Use file-like object (e.g. StringIO)

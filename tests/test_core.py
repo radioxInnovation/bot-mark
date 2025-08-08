@@ -1,6 +1,8 @@
 import pytest
 import re
-import os
+import asyncio
+import time
+import pytest
 import time
 from pathlib import Path
 from botmark import BotManager
@@ -58,9 +60,12 @@ def test_qa_block(label, model_id, test_name, qa_list):
         except Exception as e:
             pytest.fail(f"[{label}][#{i}] Exception:\nQ: {q}\n{e}")
 
+def _out(x):
+    return getattr(x, "output", x)
+
 def test_agent_consistency_across_interfaces():
     print(f"[DEBUG] Starting consistency check in: {BOTMARK_DIR}")
-    bot = BotManager(bot_dir=str(BOTMARK_DIR), allow_system_prompt_fallback = True)
+    bot = BotManager(bot_dir=str(BOTMARK_DIR), allow_system_prompt_fallback=True)
 
     md_files = [f for f in BOTMARK_DIR.rglob("*.md") if f.is_file()]
     relative_md_files = [f.relative_to(BOTMARK_DIR) for f in md_files]
@@ -86,26 +91,55 @@ def test_agent_consistency_across_interfaces():
         print(f"[DEBUG] agent_by_string setup time: {setup_time_string:.6f} seconds")
 
         try:
-            # --- Run agent_by_model ---
+            # --- Run agent_by_model (sync) ---
             start_run_model = time.time()
-            output_by_model = agent_by_model.run_sync("test").output
+            output_by_model_sync = _out(agent_by_model.run_sync("test"))
             run_time_model = time.time() - start_run_model
-            print(f"[DEBUG] Output from agent_by_model: {output_by_model}")
-            print(f"[DEBUG] agent_by_model response time: {run_time_model:.3f} seconds")
+            print(f"[DEBUG] Output from agent_by_model (sync): {output_by_model_sync}")
+            print(f"[DEBUG] agent_by_model (sync) response time: {run_time_model:.3f} seconds")
 
-            # --- Run agent_by_string ---
+            # --- Run agent_by_string (sync) ---
             start_run_string = time.time()
-            output_by_string = agent_by_string.run_sync("test").output
+            output_by_string_sync = _out(agent_by_string.run_sync("test"))
             run_time_string = time.time() - start_run_string
-            print(f"[DEBUG] Output from agent_by_string: {output_by_string}")
-            print(f"[DEBUG] agent_by_string response time: {run_time_string:.3f} seconds")
+            print(f"[DEBUG] Output from agent_by_string (sync): {output_by_string_sync}")
+            print(f"[DEBUG] agent_by_string (sync) response time: {run_time_string:.3f} seconds")
+
+            # --- Run agent_by_model (async) ---
+            start_run_model_async = time.time()
+            output_by_model_async = _out(asyncio.run(agent_by_model.run("test")))
+            run_time_model_async = time.time() - start_run_model_async
+            print(f"[DEBUG] Output from agent_by_model (async): {output_by_model_async}")
+            print(f"[DEBUG] agent_by_model (async) response time: {run_time_model_async:.3f} seconds")
+
+            # --- Run agent_by_string (async) ---
+            start_run_string_async = time.time()
+            output_by_string_async = _out(asyncio.run(agent_by_string.run("test")))
+            run_time_string_async = time.time() - start_run_string_async
+            print(f"[DEBUG] Output from agent_by_string (async): {output_by_string_async}")
+            print(f"[DEBUG] agent_by_string (async) response time: {run_time_string_async:.3f} seconds")
 
         except Exception as e:
             pytest.fail(f"[{file_id}] Agent execution failed: {e}")
 
-        assert output_by_model == output_by_string, (
-            f"[{file_id}] Mismatch between model-based and string-based agent outputs: "
-            f"{output_by_string} - {output_by_model}"
+        # Baseline consistency: model vs string (sync)
+        assert output_by_model_sync == output_by_string_sync, (
+            f"[{file_id}] Mismatch between model-based and string-based agent outputs (sync): "
+            f"{output_by_string_sync} - {output_by_model_sync}"
+        )
+        # Async should match sync
+        assert output_by_model_async == output_by_model_sync, (
+            f"[{file_id}] Mismatch between model-based async and sync outputs: "
+            f"{output_by_model_async} - {output_by_model_sync}"
+        )
+        assert output_by_string_async == output_by_string_sync, (
+            f"[{file_id}] Mismatch between string-based async and sync outputs: "
+            f"{output_by_string_async} - {output_by_string_sync}"
+        )
+        # Cross-consistency: async model vs async string
+        assert output_by_model_async == output_by_string_async, (
+            f"[{file_id}] Mismatch between model-based and string-based agent outputs (async): "
+            f"{output_by_string_async} - {output_by_model_async}"
         )
 
         payloads = [
@@ -121,16 +155,35 @@ def test_agent_consistency_across_interfaces():
         ]
 
         for idx, payload in enumerate(payloads):
+            # --- Sync respond ---
             try:
                 start_respond = time.time()
-                output_by_respond = bot.respond(payload)
+                output_by_respond_sync = _out(bot.respond(payload))
                 respond_time = time.time() - start_respond
                 print(f"[DEBUG] bot.respond() time [Payload #{idx}]: {respond_time:.3f} seconds")
-                print(f"[DEBUG] Output from bot.respond() [Payload #{idx}]: {output_by_respond}")
+                print(f"[DEBUG] Output from bot.respond() [Payload #{idx}]: {output_by_respond_sync}")
             except Exception as e:
                 pytest.fail(f"[{file_id}] bot.respond() failed on payload #{idx}: {e}")
 
-            assert output_by_respond == output_by_model, (
+            assert output_by_respond_sync == output_by_model_sync, (
                 f"[{file_id}] Mismatch in bot.respond() output [Payload #{idx}]:\n"
-                f"Expected: {output_by_model}\nGot:      {output_by_respond}"
+                f"Expected: {output_by_model_sync}\nGot:      {output_by_respond_sync}"
+            )
+
+            # --- Async respond ---
+            try:
+                start_respond_async = time.time()
+                output_by_respond_async = _out(asyncio.run(bot.respond_async(payload)))
+                respond_time_async = time.time() - start_respond_async
+                print(f"[DEBUG] bot.respond_async() time [Payload #{idx}]: {respond_time_async:.3f} seconds")
+                print(f"[DEBUG] Output from bot.respond_async() [Payload #{idx}]: {output_by_respond_async}")
+            except Exception as e:
+                pytest.fail(f"[{file_id}] bot.respond_async() failed on payload #{idx}: {e}")
+
+            # Async respond must match both sync respond and baseline
+            assert output_by_respond_async == output_by_respond_sync == output_by_model_sync, (
+                f"[{file_id}] Mismatch in async respond output [Payload #{idx}]:\n"
+                f"Expected: {output_by_model_sync}\n"
+                f"bot.respond():      {output_by_respond_sync}\n"
+                f"bot.respond_async(): {output_by_respond_async}"
             )

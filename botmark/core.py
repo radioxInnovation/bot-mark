@@ -1,7 +1,8 @@
 import json, os, unittest, re
+import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
-from typing import Any, Optional, Union, TextIO
+from typing import Any, Optional, Union, TextIO, Dict
 
 from pydantic_ai.models.test import TestModel
 from pydantic_ai import Agent
@@ -49,49 +50,62 @@ class BotMarkAgent(Agent[Any, Any]):
 
         return test_cases
     
-    def run_sync(self, user_input, **kwargs) -> Any:
-            
+
+    async def run(self, user_input, **kwargs) -> Any:
         try:
             tables = self.botmark_json["tables"]
             topics_table = tables.get("topic")
 
-            user_text = user_input if isinstance(user_input, str) else "".join( [s for s in user_input if isinstance(s, str)] )
+            # robust: str oder list behandeln
+            if isinstance(user_input, str):
+                user_text = user_input
+                non_str_parts = []
+            elif isinstance(user_input, list):
+                user_text = "".join([s for s in user_input if isinstance(s, str)])
+                non_str_parts = [x for x in user_input if not isinstance(x, str)]
+            else:
+                user_text = str(user_input)
+                non_str_parts = []
 
             topics = {}
             if topics_table:
-                topics = find_active_topics( topics_table, user_text)
+                topics = find_active_topics(topics_table, user_text)
 
-            ranking_fn = lambda block: interpret_bool_expression( block.get("attributes", {}).get("match"), topics )
+            ranking_fn = lambda block: interpret_bool_expression(
+                block.get("attributes", {}).get("match"), topics
+            )
 
-            active_blocks = get_blocks( self.botmark_json["codeblocks"], ranking_fn )
-            active_schema = get_schema( active_blocks )
-            active_header = get_header( active_blocks, self.botmark_json["header"] )
+            active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
+            active_schema = get_schema(active_blocks)
+            active_header = get_header(active_blocks, self.botmark_json["header"])
 
-            model = get_llm_model( active_header.get("model"))
-            VENV_BASE_DIR = active_header.get( "VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs") )
+            model = get_llm_model(active_header.get("model"))
+            VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
 
             def filter_funktion(key, value):
                 return "agent" in value.get("classes", [])
-            
+
             INFO = self.get_info()
 
             active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
             active_prompt = active_blocks.get("prompt")
-            final_query = render_block(active_prompt, {"QUERY": user_text} ) if active_prompt else user_text
+            final_query = render_block(active_prompt, {"QUERY": user_text}) if active_prompt else user_text
 
-            query_objects = parser.parse_to_json( final_query ) if active_header.get("inspect_user_prompt", False) == True else {}
-            query_images = get_images( query_objects.get("images", []), lambda x: True )
-            query_links, _ = process_links( query_objects.get("links", []), lambda x: True )
-            active_system = render_named_block( "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {} )
+            query_objects = parser.parse_to_json(final_query) if active_header.get("inspect_user_prompt", False) is True else {}
+            query_images = get_images(query_objects.get("images", []), lambda x: True)
+            query_links, _ = process_links(query_objects.get("links", []), lambda x: True)
+            active_system = render_named_block(
+                "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {}
+            )
 
-            answer = try_answer( active_blocks, active_system, active_header, VERSION, INFO, final_query, VENV_BASE_DIR, topics )
+            answer = try_answer(active_blocks, active_system, active_header, VERSION, INFO, final_query, VENV_BASE_DIR, topics)
 
-            if answer == None:
+            if answer is None:
                 active_toolset = get_toolset(active_blocks)
-                predicate = lambda block: interpret_bool_expression( block.get("match"), topics ) >= 0
+                predicate = lambda block: interpret_bool_expression(block.get("match"), topics) >= 0
 
-                active_images = get_images( self.botmark_json["images"], predicate )
-                active_links, mcp_servers = process_links( self.botmark_json["links"], predicate )
+                active_images = get_images(self.botmark_json.get("images", []), predicate)
+                active_links, mcp_servers = process_links(self.botmark_json.get("links", []), predicate)
 
                 system_parts = [SystemPromptPart(content=active_system)]
                 history = kwargs.get("message_history", [])
@@ -101,20 +115,72 @@ class BotMarkAgent(Agent[Any, Any]):
                     head = history[0]
                     head.parts = system_parts + head.parts
                     kwargs["message_history"] = history
-    
-                user_input = [final_query] + list(filter(lambda x: not isinstance(x, str), user_input)) + active_images + active_links + query_images + query_links 
 
-                result = super().run_sync(user_input, model=model, toolsets=active_toolset, output_type= active_schema, **kwargs)
-                llm_response = result.output.model_dump_json() if active_schema else str( result.output )
-                answer = make_answer( active_blocks, active_system, active_header, VERSION, INFO, final_query, llm_response, VENV_BASE_DIR, topics )
+                # finaler Input: Query + evtl. nicht-String-Teile + aktive/query-Assets
+                composed_input = [final_query] + non_str_parts + active_images + active_links + query_images + query_links
 
-                result = super().run_sync(user_input, model=TestModel( custom_output_text = answer ), **kwargs)
+                # 1) echter Lauf
+                result = await super().run(
+                    composed_input,
+                    model=model,
+                    toolsets=active_toolset,
+                    output_type=active_schema,
+                    **kwargs
+                )
+                llm_response = result.output.model_dump_json() if active_schema else str(result.output)
+
+                # 2) deterministische Ausgabe rendern
+                answer = make_answer(
+                    active_blocks, active_system, active_header, VERSION, INFO, final_query, llm_response, VENV_BASE_DIR, topics
+                )
+
+                result = await super().run(
+                    composed_input,
+                    model=TestModel(custom_output_text=answer),
+                    **kwargs
+                )
                 return result
 
-            result = super().run_sync(user_input, model=TestModel( custom_output_text = answer ), **kwargs)
+            # Direkte Antwort via TestModel
+            result = await super().run(
+                user_input,
+                model=TestModel(custom_output_text=answer),
+                **kwargs
+            )
             return result
+
         except Exception as e:
-            return super().run_sync(user_input, model=TestModel( custom_output_text = f'ERROR: {str(e)}' ), **kwargs)
+            return await super().run(
+                user_input,
+                model=TestModel(custom_output_text=f'ERROR: {str(e)}'),
+                **kwargs
+            )
+
+
+
+    def run_sync(self, *args, **kwargs) -> Any:
+
+        try:
+            return asyncio.run(self.run(*args, **kwargs))
+        except RuntimeError as e:
+            if "running event loop" in str(e):
+                # Notebook/FastAPI: versuche, die existierende Loop zu verwenden
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    try:
+                        # optionaler Komfort: nest_asyncio, falls vorhanden
+                        import nest_asyncio  # type: ignore
+                        nest_asyncio.apply()
+                        return loop.run_until_complete(self.run(*args, **kwargs))
+                    except Exception as inner:
+                        raise RuntimeError(
+                            "run_sync wurde innerhalb einer laufenden Event Loop aufgerufen. "
+                            "Bitte stattdessen 'await run(...)' verwenden."
+                        ) from inner
+                else:
+                    return loop.run_until_complete(self.run(*args, **kwargs))
+            # anderer RuntimeError → weiterwerfen
+            raise
 
 class BotManager:
 
@@ -187,17 +253,55 @@ class BotManager:
 
         if self.model_exists(models, model_name):
             model_data = get_model( model_name, self.bot_dir)
-            response = engine.respond_to_json_pyload( self.get_agent( model_data ), json_payload ) 
+            response = engine.respond( self.get_agent( model_data ), json_payload ) 
         else:
             if self.agent:
-                response = engine.respond_to_json_pyload( self.agent, json_payload )
+                response = engine.respond( self.agent, json_payload )
             elif self.allow_system_prompt_fallback:
                 system_prompt = ""
                 for message in json_payload.get("messages", []):
                     if message.get("role") == "system":
                         system_prompt += message.get("content", "")
-                response = engine.respond_to_json_pyload( self.get_agent( system_prompt ), json_payload )
+                response = engine.respond( self.get_agent( system_prompt ), json_payload )
             else:
                 raise ValueError( f"Model '{model_name}' not found, no fallback agent available, and system prompt fallback is disabled." )
 
         return self.response_parser( response )
+    
+
+    async def respond_async(self, json_payload: Dict) -> str:
+        """
+        Async counterpart to respond_sync: prepares payload, selects the agent,
+        calls the engine asynchronously, and returns the parsed string response.
+        """
+        json_payload = self.adapt_payload(json_payload)
+        model_name = json_payload.get("model", None)
+        models = self.get_models()
+
+        async def _call_engine_async(agent, payload):
+            # Prefer a native async engine method; otherwise run sync in a thread.
+            if hasattr(engine, "respond_async"):
+                return await engine.respond_async(agent, payload)
+            return await asyncio.to_thread(engine.respond, agent, payload)
+
+        if self.model_exists(models, model_name):
+            model_data = get_model(model_name, self.bot_dir)
+            response = await _call_engine_async(self.get_agent(model_data), json_payload)
+        else:
+            if self.agent:
+                response = await _call_engine_async(self.agent, json_payload)
+            elif self.allow_system_prompt_fallback:
+                system_prompt = "".join(
+                    m.get("content", "")
+                    for m in json_payload.get("messages", [])
+                    if m.get("role") == "system"
+                )
+                response = await _call_engine_async(self.get_agent(system_prompt), json_payload)
+            else:
+                raise ValueError(
+                    f"Model '{model_name}' not found, no fallback agent available, "
+                    f"and system prompt fallback is disabled."
+                )
+
+        return self.response_parser(response)
+
