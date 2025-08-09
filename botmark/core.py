@@ -13,7 +13,7 @@ from pydantic_ai.messages import (
 
 from .markdown_parser import parser
 from .responder import engine
-from .utils.helpers import parse_markdown_to_qa_pairs, interpret_bool_expression, find_topic, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_model, get_llm_model, get_models, get_toolset, render_block, render_named_block, try_answer, make_answer
+from .utils.helpers import parse_markdown_to_qa_pairs, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_model, get_llm_model, get_models, get_toolset, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +50,6 @@ class BotMarkAgent(Agent[Any, Any]):
 
         return test_cases
     
-
     async def run(self, user_input, **kwargs) -> Any:
         try:
             tables = self.botmark_json["tables"]
@@ -76,7 +75,7 @@ class BotMarkAgent(Agent[Any, Any]):
             )
 
             active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
-            active_schema = get_schema(active_blocks)
+            active_schema = get_schema(active_blocks, topics )
             active_header = get_header(active_blocks, self.botmark_json["header"])
 
             model = get_llm_model(active_header.get("model"))

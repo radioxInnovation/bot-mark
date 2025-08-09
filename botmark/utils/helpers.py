@@ -231,7 +231,7 @@ def process_links(links, predicate):
     return valid_links, mcp_servers
 
 # get schema
-def get_schema( blocks ):
+def get_schema( blocks, TOPICS ):
     schema_block = blocks.get("schema", {})
     schema = schema_block.get("content", None)
     attrs = schema_block.get("attributes", {})
@@ -241,6 +241,7 @@ def get_schema( blocks ):
         new_classes = get_base_models(JinjaTemplate(textwrap.dedent("""
             from typing import List
             from pydantic import BaseModel, Field
+            TOPICS = {{topics}}
 
             class ThoughtBase(BaseModel):
                 class ThoughtStep(BaseModel):
@@ -248,7 +249,7 @@ def get_schema( blocks ):
                 chain_of_thoughts: List["ThoughtBase.ThoughtStep"] = Field(..., description="A chain of thoughts behind this answer.")
 
             {{schema}}
-        """)).render(schema=schema))
+        """)).render(schema=schema, topics=str( TOPICS )))
 
         named = new_classes.get(name, None)
         if named:
@@ -269,7 +270,6 @@ def get_base_models ( code ):
                 <%!
                 from typing import List
                 from pydantic import BaseModel, Field
-
                 {{code}}
                 %>
                 <%
