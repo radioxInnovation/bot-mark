@@ -75,6 +75,7 @@ class BotMarkAgent(Agent[Any, Any]):
             )
 
             active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
+
             active_schema = get_schema(active_blocks, topics )
             active_header = get_header(active_blocks, self.botmark_json["header"])
 

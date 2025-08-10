@@ -26,12 +26,14 @@ def collect_all_tests():
 
 @pytest.mark.parametrize("label,model_id,test_name,qa_list", collect_all_tests())
 def test_qa_block(label, model_id, test_name, qa_list):
+
     bot = BotManager(bot_dir=str(BOTMARK_DIR))
     agent = bot.get_agent_from_model_name(model_id)
 
     message_history = []
 
     for i, qa in enumerate(qa_list):
+
         q = qa.get("question", "").strip()
         expected = qa.get("answer", "").strip()
 
@@ -41,8 +43,9 @@ def test_qa_block(label, model_id, test_name, qa_list):
 
         try:
             response = agent.run_sync(q, message_history=message_history or None)
-            if hasattr(response, "new_messages"):
-                message_history.extend(response.new_messages())
+            #if hasattr(response, "all_messages"):
+            #    print ( message_history )
+            #    message_history = response.new_messages()
 
             actual = getattr(response, "output", str(response)).strip()
             print(f"[DEBUG] [{label}][#{i}] Question: {q}")
