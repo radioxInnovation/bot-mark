@@ -13,17 +13,20 @@ from pydantic_ai.messages import (
 
 from .markdown_parser import parser
 from .responder import engine
+import logfire as logfire_global
+
 from .utils.helpers import parse_markdown_to_qa_pairs, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_model, get_llm_model, get_models, get_toolset, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
 load_dotenv(dotenv_path=os.path.join(script_dir, '.env'))
 
 class BotMarkAgent(Agent[Any, Any]):
 
     def __init__(self, *args, botmark_json: dict, **kwargs):
+
         self.botmark_json = botmark_json
+        self.lf = self._init_logfire_instance()
         super().__init__(*args, **kwargs)
 
     def __eq__(self, other):
@@ -36,6 +39,17 @@ class BotMarkAgent(Agent[Any, Any]):
     
     def get_info( self ):
         return self.botmark_json.get("info", "<p>info not found</p>")
+    
+    def _init_logfire_instance( self ):
+        try:
+            monitoring = ( self.botmark_json or {}).get("header", {}).get("monitoring", {} )
+
+            if "logfire" in monitoring.keys():
+                lf = logfire_global.configure( **monitoring.get("logfire", {}) )
+                lf.instrument_pydantic_ai()
+                return lf
+        except Exception as e:
+            print ( str (e) )
 
     def get_tests(self):
         test_cases = []

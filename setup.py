@@ -38,7 +38,7 @@ setuptools.setup(
         "mdit_py_plugins==0.4.2",
         "Pillow==11.3.0",
         "pydantic==2.11.7",
-        "pydantic_ai==0.6.2",
+        "pydantic_ai[logfire]==0.6.2",
         "python-dotenv==1.1.1",
         "python_frontmatter==1.1.0",
         "PyYAML==6.0.2",
