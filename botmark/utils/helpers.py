@@ -791,6 +791,23 @@ def parse_markdown_to_qa_pairs(md_text: str):
 
     return qa_pairs
 
+def instantiate_filtered(model_cls, model_data: dict, provider_instance=None):
+    sig = inspect.signature(model_cls)          # uses __init__ under the hood
+    params = sig.parameters
+    accepts_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+    # keep only kwargs that __init__ accepts (unless it has **kwargs)
+    if accepts_varkw:
+        kwargs = dict(model_data)
+    else:
+        kwargs = {k: v for k, v in model_data.items() if k in params and k != "self"}
+
+    # add provider only if accepted (or **kwargs present)
+    if provider_instance is not None and (accepts_varkw or "provider" in params):
+        kwargs["provider"] = provider_instance
+    
+    return model_cls(**kwargs)
+
 def get_llm_model(model_data):
     if isinstance (model_data, dict ):
         provider_data = model_data.pop("provider", None)  # Extract nested provider
@@ -807,17 +824,13 @@ def get_llm_model(model_data):
             provider_instance = provider_cls(**provider_data)
 
         # --- Load Model ---
-        model_type_path = model_data.pop("type", "test.TestModel")
+        model_type_path = model_data.get("type", "test.TestModel")
         model_module_path, model_class_name = model_type_path.rsplit(".", 1)
         full_model_module = f"pydantic_ai.models.{model_module_path}"
         model_module = importlib.import_module(full_model_module)
         model_cls = getattr(model_module, model_class_name)
 
-        # Inject provider instance into model arguments
-        if provider_instance:
-            return model_cls(provider=provider_instance, **model_data)
-        else:
-            return model_cls(**model_data)
+        return instantiate_filtered(model_cls, model_data, provider_instance)
 
     elif isinstance (model_data, str ):
         return OpenAIResponsesModel( model_name = model_data )
@@ -922,6 +935,10 @@ async def traverse_graph(
         
         if not options:
             return None
+        
+        # exactly one option → skip LLM/router entirely
+        if len(options) == 1:
+            return options[0]
         
         allowed_ids = [o.node_id for o in options]
         EdgeChoiceDynamic = make_edge_choice_model(allowed_ids)

@@ -103,6 +103,9 @@ class BotMarkAgent(Agent[Any, Any]):
             active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
             active_graph = get_graph( self.botmark_json["graphs"], ranking_fn )
 
+            active_header = get_header(active_blocks, self.botmark_json["header"])
+            model = get_llm_model(active_header.get("model"))
+
             answer = None
          
             if active_graph:
@@ -112,12 +115,16 @@ class BotMarkAgent(Agent[Any, Any]):
                 active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
                 processors: Dict[str, Agent] = { "[*]": self.clone( include_graphs=False ) }
 
-                default_config = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", "{}" ))
+                try:
+                    default_config = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", "{}" ))
+                except:
+                    default_config = {}
 
                 for node in active_graph["graph"]["nodes"].keys():
                     if node in active_agents.keys():
-                        print ("add bot agent")
-                        processors[node] = BotMarkAgent( botmark_json= active_agents[node].get("content", {}))
+                        bot_json = default_config | active_agents[node].get("content", {})
+
+                        processors[node] = BotMarkAgent( botmark_json= bot_json)
                     elif not node in processors.keys():
                         processors[node] = Agent( TestModel(custom_output_text=f"response of agent {node}") )
 
@@ -125,16 +132,13 @@ class BotMarkAgent(Agent[Any, Any]):
                     graph_obj=active_graph,
                     processors=processors,
                     initial_history=kwargs.get("message_history", []),
-                    selection_model=TestModel(),  # or your real model
+                    selection_model=model,
                     start_message=user_text
                 )
 
             if not answer:
 
                 active_schema = get_schema(active_blocks, topics )
-                active_header = get_header(active_blocks, self.botmark_json["header"])
-
-                model = get_llm_model(active_header.get("model"))
                 VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
 
                 def filter_funktion(key, value):
@@ -266,7 +270,7 @@ class BotManager:
         bot_json = bot_definition if isinstance(bot_definition, dict) else parser.parse_to_json(bot_definition )
 
         try:
-            bot_json = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", {} ))  | bot_json
+            bot_json = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", "{}" ))  | bot_json
         except:
             pass
 
