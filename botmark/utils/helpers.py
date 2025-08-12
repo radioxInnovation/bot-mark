@@ -1,3 +1,17 @@
+from __future__ import annotations
+
+import json
+import random
+from enum import Enum
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type
+
+# pydantic / pydantic-ai
+from pydantic import BaseModel, Field, create_model
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import ModelMessage
+
+
 import re, json, time, requests, os, sys, uuid, hashlib, httpx, mimetypes
 import urllib.parse, importlib, textwrap, inspect, subprocess, base64
 from pathlib import Path
@@ -598,6 +612,16 @@ def find_reader_by_extension(extension, readers):
             return reader_data
     return None
 
+def get_graph(graphs, ranking_function: callable = lambda x: 0  ):
+    graph  = None
+    score = -1
+    for g in graphs:
+        block_score = ranking_function(g)
+        if block_score > score:
+            graph = g
+            score = block_score
+    return graph
+
 def get_blocks(blocks, ranking_function: callable = lambda x: 0 ):
 
     valid_blocks = {}
@@ -799,3 +823,183 @@ def get_llm_model(model_data):
         return OpenAIResponsesModel( model_name = model_data )
     else:
         return TestModel()
+    
+# graph evaluation
+# ---------------------------
+# Data structures & helpers
+# ---------------------------
+
+from pydantic import BaseModel, Field, create_model
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import ModelMessage
+
+class NextOption(NamedTuple):
+    node_id: str
+    label: Optional[str]  # Edge label (source -> node_id), if present
+
+
+def unique_next_options_for_prefix(
+    valid_paths: List[List[str]],
+    edge_label: Dict[Tuple[str, str], Optional[str]],
+    prefix: List[str],
+) -> List[NextOption]:
+    """Determines all unique NextOptions for the current path prefix."""
+    opts: List[NextOption] = []
+    plen = len(prefix)
+    for vp in valid_paths:
+        if len(vp) > plen and vp[:plen] == prefix:
+            nxt = vp[plen]
+            if all(o.node_id != nxt for o in opts):
+                opts.append(
+                    NextOption(
+                        node_id=nxt,
+                        label=edge_label.get((prefix[-1], nxt)),
+                    )
+                )
+    return opts
+
+
+def make_edge_choice_model(allowed_nodes: List[str]) -> Type[BaseModel]:
+    """Creates a Pydantic model at runtime with node_id constrained to the allowed options."""
+    NodeEnum = Enum("NodeEnum", {f"opt_{i}": nid for i, nid in enumerate(allowed_nodes)})
+    return create_model(
+        "EdgeChoiceDynamic",
+        node_id=(NodeEnum, Field(..., description="The chosen node_id from the allowed options.")),
+        rationale=(str, Field(..., description="A short justification for the choice (1–2 sentences).")),
+    )
+
+
+# ---------------------------
+# Async graph traversal with per-agent histories + flat transcript + final answer
+# ---------------------------
+
+async def traverse_graph(
+    graph_obj: Dict[str, Any],
+    processors: Dict[str, Agent],
+    *,
+    initial_history: Optional[List[ModelMessage]] = None,
+    start_message: str = "Hello, let's start the conversation.",
+    selection_model: Optional[Any] = None,   # router uses ONLY this model (fallback to TestModel)
+) -> Tuple[Dict[str, List[ModelMessage]], List[str], str]:
+    """
+    Async traversal:
+    - each agent receives the previous agent's answer as input
+    - one pre-history (initial_history) is copied to EVERY agent's history
+    - internal router uses ONLY selection_model and sees the current node's history
+    Returns: (histories per agent, transcript of node names, final answer)
+    """
+    # Seed per-agent histories with the SAME initial history (copied per agent)
+    histories: Dict[str, List[ModelMessage]] = {
+        node: (list(initial_history) if initial_history else [])
+        for node in processors
+    }
+
+    valid_paths: List[List[str]] = graph_obj.get("valid_paths", [])
+
+    if not valid_paths or not valid_paths[0]:
+        return histories, [], start_message
+
+    edges = graph_obj.get("graph", {}).get("edges", [])
+    edge_label: Dict[Tuple[str, str], Optional[str]] = {
+        (e["source"], e["target"]): e.get("label") for e in edges
+    }
+
+    # Start at the first node of the first valid path
+    path_so_far: List[str] = [valid_paths[0][0]]
+    current = path_so_far[-1]
+
+    transcript: List[str] = []
+    last_output = start_message  # becomes final answer after the loop
+
+    # --- Internal async selection (router) using ONLY selection_model ---
+    async def selection(
+        current_node_id: str,
+        options: List[NextOption],
+        path_prefix: List[str],
+        hists: Dict[str, List[ModelMessage]],
+    ) -> Optional[NextOption]:
+        
+        if not options:
+            return None
+        
+        allowed_ids = [o.node_id for o in options]
+        EdgeChoiceDynamic = make_edge_choice_model(allowed_ids)
+
+        def _options_to_dict(opts: List[NextOption]):
+            return [{"node_id": o.node_id, "label": o.label} for o in opts]
+
+        router_agent = Agent(
+            model=(selection_model or TestModel()),
+            system_prompt=(
+                "You are a router agent. Choose exactly ONE of the allowed options based on the given goals. "
+                "Respond strictly as JSON that is valid for the Pydantic schema EdgeChoiceDynamic. "
+                "If multiple options are reasonable, prefer the one that provides new information "
+                "or continues the current path. NEVER choose a node_id that is not in the provided options."
+            ),
+        )
+
+        prompt = {
+            "current_node": current_node_id,
+            "path_so_far": path_prefix,
+            "options": _options_to_dict(options),
+            "instruction": (
+                "Choose exactly one option from 'options' and return its node_id. "
+                "The node_id must be one of the provided options."
+            ),
+        }
+
+        try:
+            res = await router_agent.run(
+                json.dumps(prompt),
+                output_type=EdgeChoiceDynamic,                 # validated structured output
+                message_history=hists.get(current_node_id, []),# includes initial_history
+            )
+            chosen_id = res.output.node_id.value  # Enum -> string
+        except Exception as e:
+            print("Router exception, falling back to first option:", e)
+            chosen_id = allowed_ids[0]
+
+        option_map = {o.node_id: o for o in options}
+        return option_map.get(chosen_id, options[0])
+
+    # ---------------- Main traversal loop (async) ----------------
+    def next_options_for_prefix(prefix: List[str]) -> List[NextOption]:
+        return unique_next_options_for_prefix(valid_paths, edge_label, prefix)
+
+    while True:
+
+        # 1) Run the current node's agent with the previous agent's output
+        agent = processors.get(current)
+
+        if agent is not None and hasattr(agent, "run"):
+            result = await agent.run(
+                last_output,
+                message_history=histories[current],  # starts with initial_history
+            )
+            histories[current] += result.new_messages()
+            last_output = result.output            # <- keep updating; becomes final answer
+            transcript.append(current)             # record the node/agent name
+
+        # 2) Determine next-step options
+        options = next_options_for_prefix(path_so_far)
+        if not options:
+            break  # end of path; last_output is final answer
+
+        # 3) Internal selection using ONLY selection_model (async)
+        choice = await selection(current, options, path_so_far[:], histories)
+        if choice is None:
+            break
+        if all(choice.node_id != o.node_id for o in options):
+            raise ValueError(
+                f"Selection chose invalid next node '{choice}'. "
+                f"Allowed: {[o.node_id for o in options]}"
+            )
+
+        # 4) Advance
+        path_so_far.append(choice.node_id)
+        current = choice.node_id
+
+    answer = last_output
+    return histories, transcript, answer
+

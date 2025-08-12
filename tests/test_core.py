@@ -43,9 +43,6 @@ def test_qa_block(label, model_id, test_name, qa_list):
 
         try:
             response = agent.run_sync(q, message_history=message_history or None)
-            #if hasattr(response, "all_messages"):
-            #    print ( message_history )
-            #    message_history = response.new_messages()
 
             actual = getattr(response, "output", str(response)).strip()
             print(f"[DEBUG] [{label}][#{i}] Question: {q}")

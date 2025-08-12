@@ -6,13 +6,21 @@ from mdit_py_plugins.container import container_plugin
 from ..utils.helpers import CodeBlock, read_file_content
 
 from botmark.utils.logging import log_info
+import json
 
 def parse_to_json(markdown: str ) -> dict:
     items = get_named_items(markdown)
 
+    def make_codeblock ( block ):
+
+        if "agent" in block.get("classes") and block.get("language") == "markdown":
+            return CodeBlock( language="json", attributes = block.get("attributes", {}), content=json.dumps( parse_to_json( block.get("content"))), classes=block.get("classes", []) ).to_json()
+            
+        return block.to_json() 
+
     if "codeblocks" in items:
         items["codeblocks"] = [
-            cb.to_json() for cb in items["codeblocks"] if hasattr(cb, "to_json")
+            make_codeblock ( cb )  for cb in items["codeblocks"] if hasattr(cb, "to_json")
         ]
     return items
 
@@ -255,7 +263,7 @@ def get_named_items(md_text):
                         max_seconds = float(code_block.get("attributes").get("timeout-seconds", 2.0))
                         max_paths = int(code_block.get("attributes").get("max-paths", 1000))
                         parsed_graph = MermaidParser().parse( code_block.get("content"))
-                        graphs.append( find_valid_paths( parsed_graph, max_depth=max_steps, max_seconds=max_seconds, max_paths=max_paths) )
+                        graphs.append( { "graph": parsed_graph, "valid_paths": find_valid_paths( parsed_graph, max_depth=max_steps, max_seconds=max_seconds, max_paths=max_paths), "attributes": attrs } )
                     else:
                         codeblocks.append( code_block )
         elif token.type == "inline":

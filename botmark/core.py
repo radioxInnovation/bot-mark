@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from typing import Any, Optional, Union, TextIO, Dict
 
 from pydantic_ai.models.test import TestModel
+import copy
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
     ModelRequest,
@@ -15,7 +16,7 @@ from .markdown_parser import parser
 from .responder import engine
 import logfire as logfire_global
 
-from .utils.helpers import parse_markdown_to_qa_pairs, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_model, get_llm_model, get_models, get_toolset, render_block, render_named_block, try_answer, make_answer
+from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_model, get_llm_model, get_models, get_toolset, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +27,8 @@ class BotMarkAgent(Agent[Any, Any]):
     def __init__(self, *args, botmark_json: dict, **kwargs):
 
         self.botmark_json = botmark_json
+        self._init_args = args
+        self._init_kwargs = kwargs
         self.lf = self._init_logfire_instance()
         super().__init__(*args, **kwargs)
 
@@ -36,6 +39,15 @@ class BotMarkAgent(Agent[Any, Any]):
 
     def __hash__(self):
         return hash(frozenset(self.botmark_json.items()))
+    
+    def clone(self, include_graphs = True):
+        botmark_json=copy.deepcopy(self.botmark_json)
+        if not include_graphs:
+            botmark_json["graphs"] = []
+
+        return BotMarkAgent(*self._init_args,
+                            botmark_json=botmark_json,
+                            **copy.deepcopy(self._init_kwargs))
     
     def get_info( self ):
         return self.botmark_json.get("info", "<p>info not found</p>")
@@ -89,30 +101,59 @@ class BotMarkAgent(Agent[Any, Any]):
             )
 
             active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
+            active_graph = get_graph( self.botmark_json["graphs"], ranking_fn )
 
-            active_schema = get_schema(active_blocks, topics )
-            active_header = get_header(active_blocks, self.botmark_json["header"])
+            answer = None
+         
+            if active_graph:
+                def filter_funktion(key, value):
+                    return "agent" in value.get("classes", [])
+                
+                active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
+                processors: Dict[str, Agent] = { "[*]": self.clone( include_graphs=False ) }
 
-            model = get_llm_model(active_header.get("model"))
-            VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
+                default_config = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", "{}" ))
 
-            def filter_funktion(key, value):
-                return "agent" in value.get("classes", [])
+                for node in active_graph["graph"]["nodes"].keys():
+                    if node in active_agents.keys():
+                        print ("add bot agent")
+                        processors[node] = BotMarkAgent( botmark_json= active_agents[node].get("content", {}))
+                    elif not node in processors.keys():
+                        processors[node] = Agent( TestModel(custom_output_text=f"response of agent {node}") )
 
-            INFO = self.get_info()
+                histories, transcript, answer = await traverse_graph(
+                    graph_obj=active_graph,
+                    processors=processors,
+                    initial_history=kwargs.get("message_history", []),
+                    selection_model=TestModel(),  # or your real model
+                    start_message=user_text
+                )
 
-            active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
-            active_prompt = active_blocks.get("prompt")
-            final_query = render_block(active_prompt, {"QUERY": user_text}) if active_prompt else user_text
+            if not answer:
 
-            query_objects = parser.parse_to_json(final_query) if active_header.get("inspect_user_prompt", False) is True else {}
-            query_images = get_images(query_objects.get("images", []), lambda x: True)
-            query_links, _ = process_links(query_objects.get("links", []), lambda x: True)
-            active_system = render_named_block(
-                "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {}
-            )
+                active_schema = get_schema(active_blocks, topics )
+                active_header = get_header(active_blocks, self.botmark_json["header"])
 
-            answer = try_answer(active_blocks, active_system, active_header, VERSION, INFO, final_query, VENV_BASE_DIR, topics)
+                model = get_llm_model(active_header.get("model"))
+                VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
+
+                def filter_funktion(key, value):
+                    return "agent" in value.get("classes", [])
+
+                INFO = self.get_info()
+
+                active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
+                active_prompt = active_blocks.get("prompt")
+                final_query = render_block(active_prompt, {"QUERY": user_text}) if active_prompt else user_text
+
+                query_objects = parser.parse_to_json(final_query) if active_header.get("inspect_user_prompt", False) is True else {}
+                query_images = get_images(query_objects.get("images", []), lambda x: True)
+                query_links, _ = process_links(query_objects.get("links", []), lambda x: True)
+                active_system = render_named_block(
+                    "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {}
+                )
+
+                answer = try_answer(active_blocks, active_system, active_header, VERSION, INFO, final_query, VENV_BASE_DIR, topics)
 
             if answer is None:
                 active_toolset = get_toolset(active_blocks)
@@ -169,8 +210,6 @@ class BotMarkAgent(Agent[Any, Any]):
                 model=TestModel(custom_output_text=f'ERROR: {str(e)}'),
                 **kwargs
             )
-
-
 
     def run_sync(self, *args, **kwargs) -> Any:
 
