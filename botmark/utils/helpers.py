@@ -242,12 +242,7 @@ def get_schema( blocks, TOPICS ):
             from typing import List
             from pydantic import BaseModel, Field
             TOPICS = {{topics}}
-
-            class ThoughtBase(BaseModel):
-                class ThoughtStep(BaseModel):
-                    thought: str = Field(..., description="A detailed thought")
-                chain_of_thoughts: List["ThoughtBase.ThoughtStep"] = Field(..., description="A chain of thoughts behind this answer.")
-
+                                                                    
             {{schema}}
         """)).render(schema=schema, topics=str( TOPICS )))
 
@@ -255,11 +250,7 @@ def get_schema( blocks, TOPICS ):
         if named:
             return named
 
-        thought_bases = [obj for name, obj in new_classes.items() if inspect.isclass(obj) and "ThoughtBase" in [base.__name__ for base in obj.__bases__]]
-        if len(thought_bases) == 1:
-            return thought_bases[0]
-        else:
-            return sorted(new_classes.items())[0] if new_classes else None
+        return sorted(new_classes.items())[0] if new_classes else None
 
     return None
 
@@ -661,31 +652,7 @@ def make_answer( blocks, system, header, version, info, query, text, venv_base_d
 
     if "response" in blocks:
         try:
-            response_text = render_named_block( "response", blocks, system, header, version, info, query, topics, venv_base_dir, json_response )
-            
-            try:
-                if "schema" in blocks and "chain_of_thoughts" in json_response["RESPONSE"]:     
-                    details = JinjaTemplate(
-                        textwrap.dedent("""
-
-                            <details>
-                            <summary>Chain of Thoughts</summary>
-                            ### Thought Process
-
-                            {% for step in chain_of_thoughts %}
-                            {{ loop.index }}. *{{ step["thought"] }}*
-                            {% endfor %}
-                            </details>
-                            """)
-                    ).render( chain_of_thoughts = json_response["RESPONSE"]["chain_of_thoughts"] )
-                    response_text += details
-                else:
-                    # no chain_of_thoughts found
-                    pass
-
-            except Exception as e:
-                response_text = str(e)
-                
+            response_text = render_named_block( "response", blocks, system, header, version, info, query, topics, venv_base_dir, json_response )    
         except Exception as e:
             response_text = str(e)
     return response_text
