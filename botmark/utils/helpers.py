@@ -734,7 +734,7 @@ def get_models(models_dir):
 
 def get_model(model_id, models_dir):
 
-    if not model_id:
+    if not model_id or not models_dir:
         return None
 
     models_dir = Path(models_dir)

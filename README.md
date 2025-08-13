@@ -40,6 +40,126 @@ Instead of writing behavior in code, you define:
 
 All of this is contained in a **single `.md` file**, making it versionable, testable, and human-readable.
 
+
+## 🧩 BotMark Syntax (Quick Guide)
+
+**Format & Header**
+- BotMark files begin with a **YAML frontmatter header** at the top.
+- **Any keys are allowed**; `title`, `subtitle`, and `abstract` are recommended if you plan to export documentation via **Pandoc**.
+- There are **reserved keys**. The most important is:
+  - `model` → defines the language model (e.g., `model: gpt-5`).
+- Between code blocks, you can add **any Markdown** for documentation purposes.  
+  This content has **no effect** on bot execution — it’s purely informative.
+
+**Building Blocks**
+- **Code blocks** with attribute syntax control the chatbot’s behavior:
+  - `markdown` (e.g., `{#system}`, `{#response}`)
+  - `json` (e.g., `{#schema}`)
+  - `jinja2` (templates/rendering)
+  - `mermaid` (diagrams, advanced)
+  - *(if code execution is enabled)* `python`, `mako`
+- **Links and images** are allowed.
+- Optionally, a **topics table** can be defined for pattern-based routing.
+- Code blocks are marked with **attributes** (e.g., `{#response}`, `match="..."`) and are processed accordingly.
+
+---
+
+### Example 1 – Minimal, no model
+```markdown
+---
+title: Hello World Bot
+abstract: >
+  A minimal test suite for a conversational AI bot that always responds with "Hello World!" regardless of the input.
+---
+
+~~~markdown {#response}
+Hello World 🌍
+~~~
+```
+
+---
+
+### Example 2 – System, Response, Schema (with model)
+```markdown
+---
+title: Hello World Bot
+model: gpt-5
+---
+
+~~~markdown {#system}
+You are a Hello World bot.
+Your sole purpose is to greet the user warmly using the provided `message` and `name` from the schema.
+~~~
+
+~~~jinja2 {#response}
+Message to {{ RESPONSE["name"] }} : {{ RESPONSE["message"] }} {{ RESPONSE["name"] }} 🌍
+~~~
+
+~~~json {#schema}
+{
+  "type": "object",
+  "properties": {
+    "message": { "type": "string", "description": "Text to start the response with." },
+    "name": { "type": "string", "description": "Name of the person. Use Jane Doe if unknown" }
+  },
+  "required": ["message", "name"]
+}
+~~~
+
+```
+
+---
+
+### Example 3 – Topics (simple routing)
+```markdown
+---
+title: Hello World Bot with Topics
+model: gpt-5
+---
+
+| topic    | description                       | prompt_prefix | prompt_suffix | prompt_regex |
+| -------- | --------------------------------- | ------------- | ------------- | ------------ |
+| question | Detect if message ends with a "?" |               |       ?       |              |
+
+~~~markdown {#system}
+You are a Hello World bot.
+~~~
+
+~~~jinja2 {#response match="question"}
+Good question: {{ RESPONSE["message"] }}
+~~~
+
+~~~jinja2 {#response}
+{{ RESPONSE["message"] }}
+~~~
+
+~~~json {#schema}
+{
+  "type": "object",
+  "properties": {
+    "message": { "type": "string", "description": "User's message or question." }
+  },
+  "required": ["message"]
+}
+~~~
+```
+
+**Topics & Matching**
+- You can define **multiple topics**.
+- The `match` attribute supports **logical expressions**: `and`, `or`, `not`.
+  - Examples:
+    - `match="greeting and not goodbye"`
+    - `match="question or email_format"`
+    - `match="not number_check"`
+- If multiple topics match, the **most specific/complex** match usually wins.
+
+**Security & Code Execution**
+- `allow_code_execution` is **`False` by default**.  
+  When enabled:
+  - The schema can be defined in a **Python** code block (Pydantic BaseModel).
+  - Templates can be rendered using **Mako**, which supports embedded Python.
+- Because Mako can execute arbitrary Python, enable this **only in trusted environments**.
+
 ## 🧪 Example BotMark File
 
 ```markdown
@@ -146,12 +266,22 @@ print(bot.respond(msg))
 
 ## ⚠️ Security Note
 
-System-prompt fallback is **disabled by default**.  
+System-prompt fallback is **disabled by default**.
 To allow fallback to an inline system prompt, use:
 
 ```python
 BotManager(allow_system_prompt_fallback=True)
 ```
+
+Additionally, the parameter `allow_code_execution` is **`False` by default**.
+When enabled:
+
+* The bot schema can be defined via a Python code block (using a **Pydantic BaseModel**).
+* The bot’s response template can be rendered using the **Mako template engine**, which supports embedded Python code.
+
+Because Mako allows executing arbitrary Python, **this feature is disabled by default for security reasons**. Only enable it in trusted environments where you control the bot definitions.
+
+---
 
 ## 🌐 LLM Agnostic
 

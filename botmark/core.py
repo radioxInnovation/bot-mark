@@ -178,10 +178,8 @@ class BotMarkAgent(Agent[Any, Any]):
                     head.parts = system_parts + head.parts
                     kwargs["message_history"] = history
 
-                # finaler Input: Query + evtl. nicht-String-Teile + aktive/query-Assets
                 composed_input = [final_query] + non_str_parts + active_images + active_links + query_images + query_links
 
-                # 1) echter Lauf
                 result = await super().run(
                     composed_input,
                     model=model,
@@ -201,11 +199,6 @@ class BotMarkAgent(Agent[Any, Any]):
                 else:
                     llm_response = str(out)
 
-                #llm_response = str(result.output) 
-                #if active_schema:
-                #    llm_response = result.output.model_dump_json() if hasattr( active_schema, "model_dump_json") else result.output
-
-                # 2) deterministische Ausgabe rendern
                 answer = make_answer(
                     active_blocks, active_system, active_header, VERSION, INFO, final_query, llm_response, VENV_BASE_DIR, topics
                 )
@@ -217,7 +210,6 @@ class BotMarkAgent(Agent[Any, Any]):
                 )
                 return result
 
-            # Direkte Antwort via TestModel
             result = await super().run(
                 user_input,
                 model=TestModel(custom_output_text=answer),
@@ -238,11 +230,9 @@ class BotMarkAgent(Agent[Any, Any]):
             return asyncio.run(self.run(*args, **kwargs))
         except RuntimeError as e:
             if "running event loop" in str(e):
-                # Notebook/FastAPI: versuche, die existierende Loop zu verwenden
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     try:
-                        # optionaler Komfort: nest_asyncio, falls vorhanden
                         import nest_asyncio  # type: ignore
                         nest_asyncio.apply()
                         return loop.run_until_complete(self.run(*args, **kwargs))
@@ -253,25 +243,26 @@ class BotMarkAgent(Agent[Any, Any]):
                         ) from inner
                 else:
                     return loop.run_until_complete(self.run(*args, **kwargs))
-            # anderer RuntimeError → weiterwerfen
             raise
 
 class BotManager:
 
-    def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None, bot_dir: str = ".",  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_system_prompt_fallback: bool = False ):
-        if not os.path.isdir(bot_dir):
+    def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None, bot_dir: str = ".",  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_system_prompt_fallback: bool = False, allow_code_execution: bool = False ):
+        
+        if bot_dir and not os.path.isdir(bot_dir):
             raise FileNotFoundError(f"Bot directory '{bot_dir}' does not exist.")
 
         self.bot_dir = bot_dir
         self.adapt_payload = adapt_payload
         self.response_parser = response_parser
         self.allow_system_prompt_fallback = allow_system_prompt_fallback
+        self.allow_code_execution = allow_code_execution
         self.agent = None
         if hasattr(default_model, 'read'):
             self.agent = self.get_agent( default_model.read() )
 
         elif isinstance(default_model, str):
-            self.agent = self.get_agent_from_model_name( default_model )
+            self.agent = self._get_agent_from_model_name( default_model )
 
         elif isinstance(default_model, dict):
             self.agent = self.get_agent( default_model )
@@ -291,6 +282,12 @@ class BotManager:
         except:
             pass
 
+        if not self.allow_code_execution:
+            bot_json["codeblocks"] = [
+                block for block in bot_json.get("codeblocks", [])
+                if block.get("language") not in ("mako", "python")
+            ]
+
         agent_kwargs = {
             "botmark_json": bot_json,
             "model": TestModel()
@@ -299,7 +296,7 @@ class BotManager:
         agent = BotMarkAgent(**agent_kwargs)
         return agent
 
-    def get_agent_from_model_name( self, model_name ):
+    def _get_agent_from_model_name( self, model_name ):
         model_data = get_model( model_name, self.bot_dir)
         return  self.get_agent( model_data ) if model_data else None
 
@@ -314,18 +311,18 @@ class BotManager:
     def get_models( self ) -> dict:
         return get_models( self.bot_dir )
     
-    def model_exists(self, model_list: dict, model_id: str) -> bool:
+    def _model_exists(self, model_list: dict, model_id: str) -> bool:
         for model in model_list.get("data", []):
             if model.get("id") == model_id:
                 return True
         return False
        
-    def respond(self, json_payload: dict) -> str:
+    def respond_sync(self, json_payload: dict) -> str:
         json_payload = self.adapt_payload(json_payload)
         model_name = json_payload.get( "model", None )
         models = self.get_models()
 
-        if self.model_exists(models, model_name):
+        if self._model_exists(models, model_name):
             model_data = get_model( model_name, self.bot_dir)
             response = engine.respond( self.get_agent( model_data ), json_payload ) 
         else:
@@ -343,7 +340,7 @@ class BotManager:
         return self.response_parser( response )
     
 
-    async def respond_async(self, json_payload: Dict) -> str:
+    async def respond(self, json_payload: Dict) -> str:
         """
         Async counterpart to respond_sync: prepares payload, selects the agent,
         calls the engine asynchronously, and returns the parsed string response.
@@ -358,7 +355,7 @@ class BotManager:
                 return await engine.respond_async(agent, payload)
             return await asyncio.to_thread(engine.respond, agent, payload)
 
-        if self.model_exists(models, model_name):
+        if self._model_exists(models, model_name):
             model_data = get_model(model_name, self.bot_dir)
             response = await _call_engine_async(self.get_agent(model_data), json_payload)
         else:
@@ -378,4 +375,3 @@ class BotManager:
                 )
 
         return self.response_parser(response)
-
