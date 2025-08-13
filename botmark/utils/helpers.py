@@ -7,7 +7,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type
 
 # pydantic / pydantic-ai
 from pydantic import BaseModel, Field, create_model
-from pydantic_ai import Agent
+from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.messages import ModelMessage
 
@@ -252,20 +252,22 @@ def get_schema( blocks, TOPICS ):
     name = attrs.get("root", "Schema")
 
     if schema:
-        new_classes = get_base_models(JinjaTemplate(textwrap.dedent("""
-            from typing import List
-            from pydantic import BaseModel, Field
-            TOPICS = {{topics}}
-                                                                    
-            {{schema}}
-        """)).render(schema=schema, topics=str( TOPICS )))
+        if schema_block.get("language") == "json":
+            structured = StructuredDict(schema_block.get("content")) 
+            return structured
+        elif schema_block.get("language") == "python":
+            new_classes = get_base_models(JinjaTemplate(textwrap.dedent("""
+                from typing import List
+                from pydantic import BaseModel, Field
+                TOPICS = {{topics}}
+                                                                        
+                {{schema}}
+            """)).render(schema=schema, topics=str( TOPICS )))
 
-        named = new_classes.get(name, None)
-        if named:
-            return named
-
-        return sorted(new_classes.items())[0] if new_classes else None
-
+            named = new_classes.get(name, None)
+            if named:
+                return named
+            return sorted(new_classes.items())[0] if new_classes else None
     return None
 
 def get_base_models ( code ):

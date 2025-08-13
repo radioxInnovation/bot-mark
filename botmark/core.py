@@ -3,10 +3,11 @@ import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import Any, Optional, Union, TextIO, Dict
+from pydantic import BaseModel
 
 from pydantic_ai.models.test import TestModel
 import copy
-from pydantic_ai import Agent
+from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.messages import (
     ModelRequest,
     SystemPromptPart,
@@ -101,6 +102,7 @@ class BotMarkAgent(Agent[Any, Any]):
             )
 
             active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
+
             active_graph = get_graph( self.botmark_json["graphs"], ranking_fn )
 
             active_header = get_header(active_blocks, self.botmark_json["header"])
@@ -139,6 +141,7 @@ class BotMarkAgent(Agent[Any, Any]):
             if not answer:
 
                 active_schema = get_schema(active_blocks, topics )
+
                 VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
 
                 def filter_funktion(key, value):
@@ -186,7 +189,21 @@ class BotMarkAgent(Agent[Any, Any]):
                     output_type=active_schema,
                     **kwargs
                 )
-                llm_response = result.output.model_dump_json() if active_schema else str(result.output)
+
+                out = result.output
+
+                if isinstance(out, BaseModel):
+                    llm_response = out.model_dump_json()    
+                elif isinstance(out, (dict, list)):
+                    llm_response = json.dumps(out, ensure_ascii=False)
+                elif out is None:
+                    raise ValueError("Agent returned no output (None).")
+                else:
+                    llm_response = str(out)
+
+                #llm_response = str(result.output) 
+                #if active_schema:
+                #    llm_response = result.output.model_dump_json() if hasattr( active_schema, "model_dump_json") else result.output
 
                 # 2) deterministische Ausgabe rendern
                 answer = make_answer(
