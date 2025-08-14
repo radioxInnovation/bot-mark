@@ -1,4 +1,4 @@
-import json, os, unittest, re
+import json, os, unittest, re, time
 import asyncio
 from pathlib import Path
 from dotenv import load_dotenv
@@ -17,7 +17,7 @@ from .markdown_parser import parser
 from .responder import engine
 import logfire as logfire_global
 
-from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_model, get_llm_model, get_models, get_toolset, render_block, render_named_block, try_answer, make_answer
+from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_llm_model, get_toolset, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -245,18 +245,85 @@ class BotMarkAgent(Agent[Any, Any]):
                     return loop.run_until_complete(self.run(*args, **kwargs))
             raise
 
+class BotmarkSource:
+
+    def __init__( self ):
+        pass
+
+    def list_models( self ):
+        pass
+
+    def load_botmark(self, model_id):
+        pass
+
+class FileSystemSource(BotmarkSource):
+    def __init__(self, bot_dir="."):
+        super().__init__()
+        self.bot_dir = bot_dir
+
+    def list_models(self) -> Dict[str, Any]:
+        """Return all available models in bot_dir."""
+
+        botmark_models = []
+        if self.bot_dir:
+            models_dir = Path(self.bot_dir)
+            if models_dir.exists() and models_dir.is_dir():
+                for f in models_dir.rglob("*.md"):
+                    if f.is_file():
+                        try:
+                            created = int(f.stat().st_mtime)
+                        except Exception:
+                            created = int(time.time())
+
+                        # relative Pfad ohne Endung
+                        relative_path = f.relative_to(models_dir).with_suffix("")  # entfernt die Endung
+                        botmark_models.append( {"id": str(relative_path).replace("\\", "/"), "created": created } )
+
+        defaults = { "object": "model", "owned_by": "FileSystemProvider" }
+        return {
+            "object": "list",
+            "data": [ defaults | m for m in botmark_models ]
+        }
+
+    def load_botmark(self, model_id: str):
+        """
+        Load and return the raw BotMark markdown string for the given model.
+        Only `.md` files are supported.
+        """
+        if not model_id or not self.bot_dir:
+            return None
+
+        models_dir = Path(self.bot_dir)
+        if not models_dir.exists() or not models_dir.is_dir():
+            return None
+
+        model_path = models_dir / (model_id + ".md")
+        if model_path.is_file():
+            try:
+                with open(model_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except Exception as e:
+                print(f"⚠️ Error loading {model_path}: {e}")
+                return None
+
+        return None
+
 class BotManager:
 
-    def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None, bot_dir: str = ".",  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_system_prompt_fallback: bool = False, allow_code_execution: bool = False ):
-        
-        if bot_dir and not os.path.isdir(bot_dir):
-            raise FileNotFoundError(f"Bot directory '{bot_dir}' does not exist.")
+    def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None,  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_system_prompt_fallback: bool = False, allow_code_execution: bool = False, botmark_source = None ):
 
-        self.bot_dir = bot_dir
+        if botmark_source is None:
+            botmark_source = [FileSystemSource(".")]
+        elif not isinstance(botmark_source, list):
+            botmark_source = [botmark_source]
+        self.botmark_sources = botmark_source
+
         self.adapt_payload = adapt_payload
         self.response_parser = response_parser
         self.allow_system_prompt_fallback = allow_system_prompt_fallback
         self.allow_code_execution = allow_code_execution
+        self.botmark_source = botmark_source
+
         self.agent = None
         if hasattr(default_model, 'read'):
             self.agent = self.get_agent( default_model.read() )
@@ -268,9 +335,9 @@ class BotManager:
             self.agent = self.get_agent( default_model )
 
     def get_info( self, model_name: Optional[str] = None):
-        model_data = get_model( model_name, self.bot_dir)
+        model_data = self._load_from_sources( model_name)
         if model_data:
-            return self.get_agent( model_data ).get_info()
+            return self.get_agent( parser.parse_to_json( model_data) ).get_info()
         return self.agent.get_info() if self.agent else f"<p>info not found</p>"
 
     def get_agent( self, bot_definition: Union[str, dict] ):
@@ -297,20 +364,36 @@ class BotManager:
         return agent
 
     def _get_agent_from_model_name( self, model_name ):
-        model_data = get_model( model_name, self.bot_dir)
+        model_data = parser.parse_to_json( self._load_from_sources( model_name ) )
         return  self.get_agent( model_data ) if model_data else None
 
     def get_tests(self):
         tests = [{ "model": "", "tests": self.agent.get_tests()}]  if self.agent else []
         for model_info in self.get_models().get("data", []):
             model_id = model_info["id"]
-            agent = self.get_agent( get_model( model_id, self.bot_dir) )
+            bm_code = parser.parse_to_json( self._load_from_sources( model_id ) )
+            agent = self.get_agent( bm_code )
             tests += [{"model": model_id, "tests": agent.get_tests()}]
         return tests
 
-    def get_models( self ) -> dict:
-        return get_models( self.bot_dir )
-    
+    def get_models(self) -> dict:
+        all_models = {"object": "list", "data": []}
+        seen_ids = set()
+        for source in self.botmark_sources:
+            models = source.list_models().get("data", [])
+            for m in models:
+                if m["id"] not in seen_ids:
+                    all_models["data"].append(m)
+                    seen_ids.add(m["id"])
+        return all_models
+        
+    def _load_from_sources(self, model_id: str) -> Optional[str]:
+        for source in self.botmark_sources:
+            content = source.load_botmark(model_id)
+            if content:
+                return content
+        return None
+
     def _model_exists(self, model_list: dict, model_id: str) -> bool:
         for model in model_list.get("data", []):
             if model.get("id") == model_id:
@@ -323,7 +406,7 @@ class BotManager:
         models = self.get_models()
 
         if self._model_exists(models, model_name):
-            model_data = get_model( model_name, self.bot_dir)
+            model_data = parser.parse_to_json( self._load_from_sources( model_name ) )
             response = engine.respond( self.get_agent( model_data ), json_payload ) 
         else:
             if self.agent:
@@ -356,7 +439,7 @@ class BotManager:
             return await asyncio.to_thread(engine.respond, agent, payload)
 
         if self._model_exists(models, model_name):
-            model_data = get_model(model_name, self.bot_dir)
+            model_data = parser.parse_to_json( self._load_from_sources(model_name) )
             response = await _call_engine_async(self.get_agent(model_data), json_payload)
         else:
             if self.agent:

@@ -227,16 +227,24 @@ Hello World 🌍
 
 ## 🐍 Using `BotManager` in Python
 
-### 1. From a **folder of bots**
+BotMark now loads definitions via **sources** — any class that implements:
+- `list_models() -> {"object": "list", "data": [...]}`  
+- `load_botmark(model_id: str) -> str | None` (raw BotMark markdown)
 
-> Loads bots from a folder like `bots/`.  
-> Required for any named model (e.g. `"foo"` loads `bots/foo.md`).
+The built-in source is:
+- `FileSystemSource(bot_dir="...")` — loads `.md` BotMark files from disk.
+
+You can also define **custom sources** (e.g., Langfuse, databases, APIs).
+
+---
+
+### 1) From a **folder of bots** (built-in FileSystemSource)
 
 ```python
-from botmark import BotManager
+from botmark import BotManager, FileSystemSource
 
-# Load all bot models from a folder
-bot = BotManager(bot_dir=".")  # ./foo.md → model: "foo"
+src = FileSystemSource(bot_dir="bots/")
+bot = BotManager(source=src)
 
 msg = {
   "model": "foo",
@@ -247,34 +255,24 @@ print(bot.respond(msg))
 
 ---
 
-### 2. Using a **default model** (name, string, or `StringIO`)
-
-> You can pass a model name (`"foo"`), a full markdown string, or a file-like object (`io.StringIO`)  
-> ⚠️ If a model name is used, `bot_dir` is required to locate it.
+### 2) Using a **default model** (string or `StringIO`)
 
 ```python
 from botmark import BotManager
 import io
 
-# Option 1: Use model name (requires bot_dir)
-bot = BotManager(default_model="foo", bot_dir=".")  # loads ./foo.md
+botmark_md = "```markdown {#response}\nHello World!\n```"
+bot = BotManager(default_model=botmark_md)
 
-
-# Option 2: Use file-like object (e.g. StringIO)
-bot = BotManager(default_model=io.StringIO("```markdown {#response}\nHello World!\n```"))
-
-msg = {
-  "messages": [{ "role": "user", "content": "Hello" }]
-}
+msg = {"messages": [{ "role": "user", "content": "Hello" }]}
 print(bot.respond(msg))
 ```
 
 ---
 
-### 3. From a **system prompt only** (no model lookup)
+### 3) From a **system prompt only**
 
-> 🛡️ Requires: `allow_system_prompt_fallback=True`  
-> Useful for temporary inline bots via system message.
+> 🛡️ Requires: `allow_system_prompt_fallback=True`
 
 ```python
 from botmark import BotManager
@@ -282,7 +280,6 @@ from botmark import BotManager
 bot = BotManager(allow_system_prompt_fallback=True)
 
 msg = {
-  "model": "",  # or missing
   "messages": [
     { "role": "system", "content": "```markdown {#response}\nHello World!\n```" },
     { "role": "user", "content": "Hello" }
@@ -293,24 +290,91 @@ print(bot.respond(msg))
 
 ---
 
-## 🔁 Combine Folder + Inline
+### 4) Using a **custom source** — Langfuse example
 
-> Combine stable folder-based bots with dynamic inline usage.
+> This example shows how to implement your own `BotmarkSource` to pull definitions from Langfuse.  
+> Requires `pip install langfuse` and Langfuse credentials in ENV:  
+> `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
 
 ```python
-from botmark import BotManager
+import time
+from typing import Dict, Any
+from langfuse import get_client
+from botmark import BotManager, BotmarkSource
 
-bot = BotManager(bot_dir="bots/", allow_system_prompt_fallback=True)
+class LangfuseSource(BotmarkSource):
+    def __init__(self):
+        super().__init__()
+        self.client = get_client()
+
+    def list_models(self) -> Dict[str, Any]:
+        models = []
+        try:
+            prompts = self.client.api.prompts.list().data
+            now = int(time.time())
+            for p in prompts:
+                name = getattr(p, "name", None) or getattr(p, "id", None)
+                if name:
+                    models.append({"id": name, "created": now})
+        except Exception as e:
+            print(f"⚠️ Could not list Langfuse prompts: {e}")
+
+        defaults = {"object": "model", "owned_by": "LangfuseSource"}
+        return {"object": "list", "data": [defaults | m for m in models]}
+
+    def load_botmark(self, model_id: str):
+        try:
+            prompt = self.client.get_prompt(model_id)
+            return getattr(prompt, "prompt", None)
+        except Exception as e:
+            print(f"⚠️ Error loading Langfuse prompt '{model_id}': {e}")
+            return None
+
+# Example usage
+src = LangfuseSource()
+bot = BotManager(source=src)
 
 msg = {
-  "model": "nonexistent-model",  # fallback to system prompt
-  "messages": [
-    { "role": "system", "content": "```markdown {#response}\nHello World!\n```" },
-    { "role": "user", "content": "Hello" }
-  ]
+  "model": "hello_world_bot",  # Langfuse prompt name
+  "messages": [{ "role": "user", "content": "Hello" }]
 }
 print(bot.respond(msg))
 ```
+
+---
+
+
+### 5) Combining multiple sources
+
+```python
+from botmark import BotManager, FileSystemSource
+
+sources = [
+    FileSystemSource(bot_dir="bots/"),
+    LangfuseSource(),  # custom source from above
+]
+
+bot = BotManager(source=sources)
+
+msg = {
+  "model": "foo",  # checks FileSystemSource first, then LangfuseSource
+  "messages": [{ "role": "user", "content": "Hello" }]
+}
+print(bot.respond(msg))
+```
+
+#### How multiple sources work
+
+```mermaid
+flowchart LR
+    A[BotManager] --> B{First source}
+    B -- Found --> C[Return BotMark definition]
+    B -- Not found --> D{Next source}
+    D -- Found --> C
+    D -- Not found --> E[Error: Model not found]
+```
+
+> **Order matters**: The first source that returns a BotMark string wins.
 
 ---
 

@@ -1,4 +1,4 @@
-__version__ = "1.0.8"
-from .core import BotManager
+__version__ = "1.0.9"
+from .core import BotManager, BotMarkAgent, FileSystemSource, BotmarkSource
 
-__all__ = ["BotManager", "BotMarkAgent"]
+__all__ = ["BotManager", "BotMarkAgent", "FileSystemSource", "BotmarkSource"]

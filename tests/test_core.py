@@ -7,13 +7,17 @@ import time
 from pathlib import Path
 from botmark import BotManager
 
+from botmark import FileSystemSource
+
 # Optional path override via environment variable
 BOTMARK_DIR = Path(Path(__file__).parent / "bots").resolve()
+
+botmark_source = FileSystemSource( BOTMARK_DIR )
 
 def collect_all_tests():
     print(f"[DEBUG] Using test directory: {BOTMARK_DIR}")
     tests = []
-    bot = BotManager(bot_dir=str(BOTMARK_DIR), allow_code_execution = True)
+    bot = BotManager( allow_code_execution = True, botmark_source = botmark_source )
 
     for entry in bot.get_tests():
         model_id = entry.get("model", "(unnamed)")
@@ -27,7 +31,7 @@ def collect_all_tests():
 @pytest.mark.parametrize("label,model_id,test_name,qa_list", collect_all_tests())
 def test_qa_block(label, model_id, test_name, qa_list):
 
-    bot = BotManager(bot_dir=str(BOTMARK_DIR), allow_code_execution = True)
+    bot = BotManager( allow_code_execution = True, botmark_source = botmark_source)
     agent = bot._get_agent_from_model_name(model_id)
 
     message_history = []
@@ -65,7 +69,7 @@ def _out(x):
 
 def test_agent_consistency_across_interfaces():
     print(f"[DEBUG] Starting consistency check in: {BOTMARK_DIR}")
-    bot = BotManager(bot_dir=str(BOTMARK_DIR), allow_system_prompt_fallback=True, allow_code_execution = True)
+    bot = BotManager( allow_system_prompt_fallback=True, allow_code_execution = True, botmark_source = botmark_source)
 
     md_files = [f for f in BOTMARK_DIR.rglob("*.md") if f.is_file()]
     relative_md_files = [f.relative_to(BOTMARK_DIR) for f in md_files]
