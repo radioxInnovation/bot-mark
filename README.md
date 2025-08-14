@@ -219,23 +219,30 @@ Each agent can modify, review, or add to the result before returning control to 
 
 In this Hello World example:
 - The **main agent** writes a short email.
-- The **review agent** checks tone and clarity.
+- The **review agent** forces **emojis at the start and end** of the email.
+- (In practice, the review agent can enforce **any user-dependent logic**: tone, length, formatting, etc.)
 - The main agent incorporates feedback and outputs the improved email.
 
-```markdown
+````markdown
 ---
-title: Hello World Email with Review
+title: Simple Email Review Graph
 model: gpt-5
 ---
 
 # Main Agent
 
 ~~~markdown {#system}
-You are an assistant that writes short, friendly emails.
-After receiving feedback, update your draft and output the improved email.
+You are the **Main Agent**.
+Write a short, polite email to greet the recipient with "Hello World" and introduce yourself.
+Then pass your draft to the next agent in the graph for review.
 ~~~
 
-## Graph
+# Graph
+
+# [*] refers to the main agent.
+# Initially the main agent writes the email.
+# The review agent gives feedback.
+# The main agent improves the email and outputs the final version.
 
 ~~~mermaid {#graph}
 stateDiagram-v2
@@ -250,19 +257,26 @@ stateDiagram-v2
 title: review_agent
 ---
 
-```markdown {#system}
-You are an email reviewer.
-Read the provided email and give short, actionable feedback on tone, clarity, and friendliness.
+
+```markdown {#response}
+Add at least one emoji at the **start** and one at the **end** of the email text
 ```
-~~~
-```
+````
 
 **How it works**
 1. User sends a request → main agent writes an initial email.
 2. Graph routes the draft to the `review_agent`.
-3. `review_agent` returns concise feedback.
+3. `review_agent` returns concise feedback (e.g., “Add an emoji at the start and one at the end”).
 4. Main agent updates the email based on the feedback.
 5. Final improved email is returned to the user.
+
+---
+
+### Suggestion Prompt (ready to paste)
+
+~~~markdown
+Write a e-mail to a friend
+~~~
 
 
 ## 🐍 Using `BotManager` in Python
