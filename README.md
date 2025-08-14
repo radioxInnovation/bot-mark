@@ -378,6 +378,39 @@ flowchart LR
 
 ---
 
+### 6) Behavior with `default_model` and `allow_system_prompt_fallback`
+
+When `BotManager` tries to resolve a model, the behavior depends on these settings:
+
+```mermaid
+flowchart TD
+    Start[Incoming request] --> CheckModel{model in request?}
+    CheckModel -- Yes --> TrySources
+    CheckModel -- No --> DefaultModel?
+
+    DefaultModel? -- Yes --> UseDefault[Use default_model as BotMark]
+    DefaultModel? -- No --> AllowFallback?
+
+    AllowFallback? -- Yes --> UseSystemPrompt[Extract BotMark from system prompt]
+    AllowFallback? -- No --> Error[Return 'Model not found' error]
+
+    TrySources[Lookup model in source(s)] -- Found --> UseSource[Use found BotMark]
+    TrySources -- Not found --> DefaultModel2?
+
+    DefaultModel2? -- Yes --> UseDefault
+    DefaultModel2? -- No --> AllowFallback2?
+
+    AllowFallback2? -- Yes --> UseSystemPrompt
+    AllowFallback2? -- No --> Error
+```
+
+**Key points:**
+- If `default_model` is set, it’s used whenever no model is found or no model is provided.
+- If `allow_system_prompt_fallback=True`, BotManager will use the **system message content** as the BotMark definition when no model is resolved.
+- If neither is set, unresolved models result in an error.
+
+---
+
 ## ⚠️ Security Note
 
 System-prompt fallback is **disabled by default**.
