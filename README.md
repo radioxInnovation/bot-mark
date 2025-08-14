@@ -569,6 +569,13 @@ pandoc botname.md --toc -o complete_bot.docx
 
 > This approach enforces **consistency** and reduces duplication across code and documentation.
 
+
+## Examples
+
+[System Fault Reporter](examples/documentation/system_fault_reporter.md)
+
+
+
 ## ✅ Summary
 
 BotMark is ideal for teams who want:
