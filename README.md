@@ -46,6 +46,8 @@ A BotMark file is just **Markdown** with special **code block attributes** to de
 - **Optional graphs** – multi-agent workflows (`{#graph}`)
 - **Optional topics** – pattern-based routing
 
+All of this is contained in a **single `.md` file**, making it versionable, testable, and human-readable.
+
 Example minimal bot:
 
 ```markdown
@@ -58,7 +60,6 @@ Hello World 🌍
 ~~~
 ```
 
-All of this is contained in a **single `.md` file**, making it versionable, testable, and human-readable.
 
 
 ## 🧩 Quick Syntax Reference
@@ -85,7 +86,7 @@ After receiving feedback, update your draft and output the improved email.
 ```
 ---
 
-### Example 2 – System, Response, Schema (with model)
+### Example 2 – System, Response, Schema
 ```markdown
 ---
 title: Hello World Bot
@@ -158,15 +159,17 @@ Good question: {{ RESPONSE["message"] }}
     - `match="greeting and not goodbye"`
     - `match="question or email_format"`
     - `match="not number_check"`
-- If multiple topics match, the **most specific/complex** match usually wins.
+- If multiple topics match, the **most specific/complex** match wins.
 
-**Security & Code Execution**
+**Security & Code Execution**  
 - `allow_code_execution` is **`False` by default**.  
-  When enabled:
-  - The schema can be defined in a **Python** code block (Pydantic BaseModel).
-  - Templates can be rendered using **Mako**, which supports embedded Python.
-- Because Mako can execute arbitrary Python, enable this **only in trusted environments**.
-
+- When **disabled** (default):
+  - Define your schema in a **`json`** code block using a standard **JSON Schema**.
+  - Write your templates in **Jinja2**, which is safe for rendering and does not execute arbitrary Python code.
+- When **enabled** (`allow_code_execution=True`):
+  - You may define the schema in a **Python** code block (e.g., a **Pydantic BaseModel**).
+  - Templates can use **Mako**, which supports embedded Python code and advanced logic.
+- ⚠️ Because Mako and Python blocks can execute arbitrary code, enable this **only in trusted environments**.
 
 ### Example 4 – Tools
 
