@@ -225,7 +225,70 @@ Hello World 🌍
 
 ```
 
+
 ## 🐍 Using `BotManager` in Python
+
+`BotManager` has two main purposes:
+
+1) **Create a standalone Agent from a BotMark definition**  
+   Use `get_agent(...)` to obtain a **Pydantic-based AI agent** that is configured by a BotMark file/string.  
+   You can then use this agent independently of any model lookup or source.
+
+   **Signature**
+   ```python
+   def get_agent(self, bot_definition: Union[str, dict]):
+       ...
+   ```
+
+   **Example**
+   ```python
+   from botmark import BotManager
+
+   botmark_md = "```markdown {#response}\nHello World!\n```"
+   mgr = BotManager()
+   agent = mgr.get_agent(botmark_md)   # returns a configured, standalone agent
+   # agent.run(...), agent.handle(...), etc. (depending on your Agent API)
+   ```
+
+2) **Manage multiple bots via sources, `default_model`, and system-prompt fallback**  
+   `BotManager` can resolve models from one or more **Botmark sources** (e.g., built-in `FileSystemSource`, custom sources like a Langfuse-backed loader).  
+   If no source resolves a model, it can use a **`default_model`** or (if enabled) the **system message** as a fallback.
+
+   - `get_models()` returns a JSON object **analogous to OpenAI’s `/models`** endpoint, containing models aggregated from all configured sources.
+   - `respond()` creates an answer from an **OpenAI-compatible request payload** (messages, model, etc.).  
+     - `respond()` is **async**  
+     - `respond_sync()` is the **synchronous** counterpart
+
+   **Example**
+   ```python
+   from botmark import BotManager, FileSystemSource
+
+   src = FileSystemSource(bot_dir="bots/")
+   mgr = BotManager(source=src, allow_system_prompt_fallback=True)
+
+   # List models (OpenAI-like shape)
+   models = mgr.get_models()
+   # => {"object": "list", "data": [{"id": "...", "object": "model", "created": 123, "owned_by": "FileSystemSource"}, ...]}
+
+   # Sync respond
+   msg = {
+     "model": "hello_world",  # resolved via sources; falls back if missing
+     "messages": [
+       {"role": "user", "content": "Hi there"}
+     ]
+   }
+   result = mgr.respond_sync(msg)
+   print(result)
+
+   # Async respond
+   # import asyncio
+   # result = asyncio.run(mgr.respond(msg))
+   ```
+
+**Resolution order (summary)**  
+1. If `model` is provided: try sources in order → if none found, use `default_model` → if not set and `allow_system_prompt_fallback=True`, use system message → otherwise error.  
+2. If `model` is missing: use `default_model` → else (if enabled) use system message → otherwise error.
+
 
 BotMark now loads definitions via **sources** — any class that implements:
 - `list_models() -> {"object": "list", "data": [...]}`  
