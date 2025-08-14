@@ -232,9 +232,8 @@ model: gpt-5
 # Main Agent
 
 ~~~markdown {#system}
-You are the **Main Agent**.
-Write a short, polite email to greet the recipient with "Hello World" and introduce yourself.
-Then pass your draft to the next agent in the graph for review.
+You are an assistant that writes short, friendly emails.
+After receiving feedback, update your draft and output the improved email.
 ~~~
 
 # Graph
