@@ -64,19 +64,18 @@ All of this is contained in a **single `.md` file**, making it versionable, test
 
 ---
 
-### Example 1 – Minimal, no model
+### Example 1 – A Simple Email writer
 ```markdown
 ---
-title: Hello World Bot
-abstract: >
-  A minimal test suite for a conversational AI bot that always responds with "Hello World!" regardless of the input.
+title: Simple Email Writer
+model: gpt-5
 ---
 
-~~~markdown {#response}
-Hello World 🌍
+~~~markdown {#system}
+You are an assistant that writes short, friendly emails.
+After receiving feedback, update your draft and output the improved email.
 ~~~
 ```
-
 ---
 
 ### Example 2 – System, Response, Schema (with model)
@@ -202,12 +201,58 @@ The `get_current_datetime` function uses Python’s `datetime` module to generat
 
 When the bot receives a message like *"What’s the date and time?"*, it will call the `get_current_datetime` tool and return the current timestamp.
 
-
 ### Example 5 – Graphs (advanced)
 
+BotMark supports defining **multi-agent workflows** using **Mermaid state diagrams** in a `#graph` code block.  
+The *main agent* runs first, then passes its output through the agents defined in the graph.  
+Each agent can modify, review, or add to the result before returning control to the main agent for a final output.
 
+In this Hello World example:
+- The **main agent** writes a short email.
+- The **review agent** checks tone and clarity.
+- The main agent incorporates feedback and outputs the improved email.
 
+```markdown
+---
+title: Hello World Email with Review
+model: gpt-5
+---
 
+# Main Agent
+
+~~~markdown {#system}
+You are an assistant that writes short, friendly emails.
+After receiving feedback, update your draft and output the improved email.
+~~~
+
+## Graph
+
+~~~mermaid {#graph}
+stateDiagram-v2
+    [*] --> review_agent
+    review_agent --> [*]
+~~~
+
+# Review Agent
+
+~~~markdown {#review_agent .agent}
+---
+title: review_agent
+---
+
+```markdown {#system}
+You are an email reviewer.
+Read the provided email and give short, actionable feedback on tone, clarity, and friendliness.
+```
+~~~
+```
+
+**How it works**
+1. User sends a request → main agent writes an initial email.
+2. Graph routes the draft to the `review_agent`.
+3. `review_agent` returns concise feedback.
+4. Main agent updates the email based on the feedback.
+5. Final improved email is returned to the user.
 
 
 ## 🧪 Example BotMark File
