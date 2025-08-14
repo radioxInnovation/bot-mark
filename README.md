@@ -366,12 +366,12 @@ print(bot.respond(msg))
 #### How multiple sources work
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[BotManager] --> B{First source}
-    B -- Found --> C[Return BotMark definition]
-    B -- Not found --> D{Next source}
-    D -- Found --> C
-    D -- Not found --> E[Error: Model not found]
+    B --|found|--> C[Return BotMark]
+    B --|not found|--> D{Next source}
+    D --|found|--> C
+    D --|not found|--> F[Check default_model / system_prompt_fallback]
 ```
 
 > **Order matters**: The first source that returns a BotMark string wins.
@@ -384,24 +384,22 @@ When `BotManager` tries to resolve a model, the behavior depends on these settin
 
 ```mermaid
 flowchart TD
-    Start[Incoming request] --> CheckModel{model in request?}
-    CheckModel -- Yes --> TrySources
-    CheckModel -- No --> DefaultModel?
+    Start[Incoming request] --> HasModel{model provided?}
+    HasModel --|yes|--> TrySources[Lookup in sources]
+    HasModel --|no|--> HasDefault{default_model set?}
 
-    DefaultModel? -- Yes --> UseDefault[Use default_model as BotMark]
-    DefaultModel? -- No --> AllowFallback?
+    HasDefault --|yes|--> UseDefault[Use default_model]
+    HasDefault --|no|--> AllowFallback{allow_system_prompt_fallback?}
+    AllowFallback --|yes|--> UseSystem[Use system prompt content]
+    AllowFallback --|no|--> Err[Error: model not found]
 
-    AllowFallback? -- Yes --> UseSystemPrompt[Extract BotMark from system prompt]
-    AllowFallback? -- No --> Error[Return 'Model not found' error]
+    TrySources --|found|--> UseSource[Use source result]
+    TrySources --|not found|--> FallbackDefault{default_model set?}
+    FallbackDefault --|yes|--> UseDefault
+    FallbackDefault --|no|--> FallbackAllow{allow_system_prompt_fallback?}
+    FallbackAllow --|yes|--> UseSystem
+    FallbackAllow --|no|--> Err
 
-    TrySources[Lookup model in source(s)] -- Found --> UseSource[Use found BotMark]
-    TrySources -- Not found --> DefaultModel2?
-
-    DefaultModel2? -- Yes --> UseDefault
-    DefaultModel2? -- No --> AllowFallback2?
-
-    AllowFallback2? -- Yes --> UseSystemPrompt
-    AllowFallback2? -- No --> Error
 ```
 
 **Key points:**
