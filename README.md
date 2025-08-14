@@ -1,12 +1,18 @@
 # BotMark – Structured Chatbots in Markdown
 
-**BotMark** is a framework for defining, running, and documenting chatbots using plain Markdown — independent of any specific LLM or backend.
+**BotMark** lets you define, run, and document chatbots entirely in Markdown — combining the **system prompt**, **data schema**, **output templates**, and optional **multi-agent workflows** in one file.
 
-It enables a **single-source-of-truth** approach: chatbot logic, user guidance, data schema, and response formatting are all written in one Markdown file, which can be directly executed, tested, or exported.
+This **single source of truth** makes bots easier to maintain, version-control, and test — all without locking you into a specific LLM or backend.
 
 ---
 
-## ✨ At a Glance
+## ✨ Why BotMark?
+
+- **One file = one bot** → prompts, schema, and docs stay in sync
+- **LLM-agnostic** → works with OpenAI, Claude, local models, or any API
+- **Version-friendly** → plain Markdown plays well with Git
+- **Executable** → run directly via Python’s `botmark` package
+- **Extensible** → add custom tools, topics, and agent graphs
 
 | Feature                        | Description                                                                 |
 |-------------------------------|-----------------------------------------------------------------------------|
@@ -31,36 +37,37 @@ pip install botmark
 
 ## 📘 What is BotMark?
 
-BotMark is a format and Python runtime for defining chatbots declaratively.  
-Instead of writing behavior in code, you define:
+A BotMark file is just **Markdown** with special **code block attributes** to define:
 
-- The **system prompt** (what the LLM should do)
-- The **data schema** (what inputs the bot expects)
-- The **response template** (how to render output for the user)
+- **System prompt** – instructions for the LLM (`{#system}`)
+- **Response template** – output rendering (`{#response}`)
+- **Schema** – input validation (`{#schema}`)
+- **Optional tools** – Python functions callable by the bot (`.tool`)
+- **Optional graphs** – multi-agent workflows (`{#graph}`)
+- **Optional topics** – pattern-based routing
+
+Example minimal bot:
+
+```markdown
+---
+title: Hello World Bot
+---
+
+~~~markdown {#response}
+Hello World 🌍
+~~~
+```
 
 All of this is contained in a **single `.md` file**, making it versionable, testable, and human-readable.
 
 
-## 🧩 BotMark Syntax (Quick Guide)
+## 🧩 Quick Syntax Reference
 
-**Format & Header**
-- BotMark files begin with a **YAML frontmatter header** at the top.
-- **Any keys are allowed**; `title`, `subtitle`, and `abstract` are recommended if you plan to export documentation via **Pandoc**.
-- There are **reserved keys**. The most important is:
-  - `model` → defines the language model (e.g., `model: gpt-5`).
-- Between code blocks, you can add **any Markdown** for documentation purposes.  
-  This content has **no effect** on bot execution — it’s purely informative.
-
-**Building Blocks**
-- **Code blocks** with attribute syntax control the chatbot’s behavior:
-  - `markdown` (e.g., `{#system}`, `{#response}`)
-  - `json` (e.g., `{#schema}`)
-  - `jinja2` (templates/rendering)
-  - `mermaid` (diagrams, advanced)
-  - *(if code execution is enabled)* `python`, `mako`
-- **Links and images** are allowed.
-- Optionally, a **topics table** can be defined for pattern-based routing.
-- Code blocks are marked with **attributes** (e.g., `{#response}`, `match="..."`) and are processed accordingly.
+- **YAML frontmatter** → metadata (`title`, `model`, `abstract`, etc.)
+- **Code blocks** with `{#...}` → bot logic
+- **`.tool` blocks** → Python functions available to the bot
+- **`{#graph}`** → Mermaid diagrams defining agent flows
+- **Topics table** → optional regex/pattern routing
 
 ---
 
@@ -253,22 +260,6 @@ Read the provided email and give short, actionable feedback on tone, clarity, an
 3. `review_agent` returns concise feedback.
 4. Main agent updates the email based on the feedback.
 5. Final improved email is returned to the user.
-
-
-## 🧪 Example BotMark File
-
-```markdown
----
-title: Hello World Bot
-abstract: >
-  A minimal test suite for a conversational AI bot that always responds with "Hello World!" regardless of the input. 
----
-
-~~~markdown {#response}
-Hello World 🌍
-~~~
-
-```
 
 
 ## 🐍 Using `BotManager` in Python
