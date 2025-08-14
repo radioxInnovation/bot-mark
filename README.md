@@ -572,8 +572,7 @@ pandoc botname.md --toc -o complete_bot.docx
 
 ## Examples
 
-[System Fault Reporter](examples/documentation/system_fault_reporter.md)
-
+[System Fault Reporter](examples/documentation/system_fault_reporter.md?raw=1)
 
 
 ## ✅ Summary
