@@ -111,6 +111,7 @@ Message to {{ RESPONSE["name"] }} : {{ RESPONSE["message"] }} {{ RESPONSE["name"
 ---
 
 ### Example 3 – Topics (simple routing)
+
 ```markdown
 ---
 title: Hello World Bot with Topics
@@ -159,6 +160,55 @@ Good question: {{ RESPONSE["message"] }}
   - The schema can be defined in a **Python** code block (Pydantic BaseModel).
   - Templates can be rendered using **Mako**, which supports embedded Python.
 - Because Mako can execute arbitrary Python, enable this **only in trusted environments**.
+
+
+### Example 4 – Tools
+
+````markdown
+---
+title: Hello World Tool Bot
+subtitle: Minimal Conversational AI demonstrating a date/time tool
+abstract: A simple bot that can greet the user and return the current date and time.
+model: gpt-5
+---
+
+# System Prompt
+
+~~~markdown {#system}
+You are a Hello World bot.  
+You can greet the user and provide the current date and time.
+~~~
+
+# Tool: Get Current Date and Time
+
+~~~python {#get_datetime .tool}
+from datetime import datetime
+
+def get_current_datetime() -> str:
+    '''Return the current date and time as a string.'''
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+~~~
+
+````
+
+This example demonstrates how to use a simple Python tool inside a BotMark bot to return the current date and time.  
+The `get_current_datetime` function uses Python’s `datetime` module to generate a timestamp in the format `YYYY-MM-DD HH:MM:SS`.
+
+**Key points:**
+- The tool is defined in a Python code block with the `.tool` attribute.
+- **`allow_code_execution` must be set to `True`** when creating the `BotManager` in Python, otherwise the tool will not run.
+- Code execution is disabled by default for security reasons, as it allows arbitrary Python code to be executed from the bot definition.
+- Only enable this in a trusted environment where you control the bot files.
+
+When the bot receives a message like *"What’s the date and time?"*, it will call the `get_current_datetime` tool and return the current timestamp.
+
+
+### Example 5 – Graphs (advanced)
+
+
+
+
+
 
 ## 🧪 Example BotMark File
 
