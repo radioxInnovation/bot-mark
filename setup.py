@@ -2,20 +2,20 @@ import setuptools
 import os
 import re
 
-def find_version():
-    with open(os.path.join("botmark", "__init__.py"), encoding="utf-8") as f:
-        content = f.read()
-    match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", content, re.M)
-    if match:
-        return match.group(1)
-    raise RuntimeError("Version not found in __init__.py")
+# def find_version():
+#     with open(os.path.join("botmark", "__init__.py"), encoding="utf-8") as f:
+#         content = f.read()
+#     match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", content, re.M)
+#     if match:
+#         return match.group(1)
+#     raise RuntimeError("Version not found in __init__.py")
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="botmark",
-    version=find_version(),
+    version="1.0.9",
     author="Frank Rettig",
     author_email="118481987+frettig-radiox@users.noreply.github.com",
     description="BotMark – Define, run, and document LLM chatbots in plain Markdown. Framework for executable, portable, and LLM-agnostic chatbot workflows.",
@@ -24,10 +24,10 @@ setuptools.setup(
     url="https://www.radiox-innovation.de/",
     packages=setuptools.find_packages(),
     include_package_data=True,
+    license="License :: OSI Approved :: MIT License",
     classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
     ],
     python_requires=">=3.11",
     install_requires=[
