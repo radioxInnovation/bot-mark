@@ -29,8 +29,7 @@ from pydantic_ai.tools import Tool
 from pydantic_ai import ImageUrl, BinaryContent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
-from pydantic_ai.toolsets import FunctionToolset
-from pydantic_ai.toolsets import CombinedToolset
+from pydantic_ai.toolsets import FunctionToolset, CombinedToolset
 
 from botmark.utils.logging import log_info
 

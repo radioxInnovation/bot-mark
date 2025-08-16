@@ -27,13 +27,109 @@ This **single source of truth** makes bots easier to maintain, version-control, 
 
 ## 📦 Installation
 
-You can install **BotMark** via pip:
+BotMark is designed to **integrate cleanly into real development environments**: a lean base install, opt-in provider extras, and predictable, lockfile-friendly dependency resolution.
+
+> Requires **Python 3.11+**
+
+### Base install (lean core)
+
+Installs BotMark with the slim runtime:
 
 ```bash
 pip install botmark
 ```
 
-> Requires **Python 3.11+**
+This keeps your environment minimal and fast to resolve. Add model/provider integrations only when you need them.
+
+### Provider extras (pass-through to `pydantic-ai-slim`)
+
+Choose exactly the backends/tools you use — we forward extras 1:1 to `pydantic-ai-slim`:
+
+* **Model/Provider**: `openai`, `anthropic`, `groq`, `mistral`, `cohere`, `bedrock`, `vertexai`, `google`, `huggingface`
+* **Search/Tools**: `duckduckgo`, `tavily`, `cli`, `mcp`, `a2a`, `ag-ui`
+* **Observability/Evals**: `logfire`, `evals`
+
+Examples:
+
+```bash
+# OpenAI only
+pip install "botmark[openai]"
+
+# OpenAI + CLI helpers + Groq
+pip install "botmark[openai,cli,groq]"
+
+# Observability (logfire) and evals
+pip install "botmark[logfire,evals]"
+```
+
+### Everything slim
+
+Grab BotMark plus **all** slim extras (useful for experimentation; heavier footprint):
+
+```bash
+pip install "botmark[all]"
+```
+
+### Full `pydantic-ai` (non-slim)
+
+If you prefer the full distribution bundled by `pydantic-ai`:
+
+```bash
+pip install "botmark[pydantic_ai]"
+```
+
+This installs `pydantic-ai[all]` under the hood.
+
+---
+
+## 🧑‍💻 Works with your toolchain
+
+Use the same extras with Poetry, uv, pip-tools, etc.
+
+**Poetry**
+
+```bash
+# base
+poetry add botmark
+# with extras
+poetry add botmark -E openai -E cli
+```
+
+**uv**
+
+```bash
+uv add botmark
+uv add 'botmark[openai,groq]'
+```
+
+**pip-tools**
+
+```bash
+# requirements.in
+echo 'botmark[openai,cli]' >> requirements.in
+pip-compile && pip-sync
+```
+
+**Editable/local dev**
+
+```bash
+# from a cloned repo
+pip install -e .
+# with extras during dev
+pip install -e ".[openai,cli]"
+```
+
+---
+
+## ✅ Why this layout integrates well
+
+* **Minimal by default**: base install is slim and quick; no surprise transitive bloat.
+* **Explicit capabilities**: opt into only the providers/tools you actually use.
+* **Lockfile-friendly**: deterministic, easy to pin in Poetry/pip-tools/uv.
+* **Composable**: combine extras freely (`[openai,groq,cli,logfire]`).
+* **Escape hatch**: need everything? Use `botmark[all]` or `botmark[pydantic_ai]`.
+
+---
 
 ## 📘 What is BotMark?
 
@@ -59,8 +155,6 @@ title: Hello World Bot
 Hello World 🌍
 ~~~
 ```
-
-
 
 ## 🧩 Quick Syntax Reference
 
