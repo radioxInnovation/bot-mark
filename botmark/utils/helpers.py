@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Mapping, Union
 
 # pydantic / pydantic-ai
 from pydantic import BaseModel, Field, create_model
@@ -12,7 +12,6 @@ from pydantic_ai.messages import ModelMessage
 
 import re, json, time, requests, os, sys, uuid, hashlib, httpx, mimetypes
 import urllib.parse, importlib, textwrap, inspect, subprocess, base64
-from io import StringIO
 
 import ast
 import operator
@@ -32,7 +31,7 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets import CombinedToolset
 
-from PIL import Image
+#from PIL import Image
 
 from botmark.utils.logging import log_info
 
@@ -291,35 +290,6 @@ def get_base_models(code: str):
     except Exception as e:
         print(str(e))
         return {}
-
-# def get_base_models ( code ):
-#     try:
-#         mako_template = textwrap.dedent(f"""
-#                 <%!
-#                 from typing import List
-#                 from pydantic import BaseModel, Field
-#                 {code}
-#                 %>
-#                 <%
-#                 import inspect
-
-#                 classes = {{name: obj for name, obj in globals().items() if inspect.isclass(obj) and issubclass(obj, BaseModel) and name != 'BaseModel'}}    
-#                 context.classes = classes
-#                 %>""")
-
-#         # Create a buffer and context
-#         buffer = StringIO()
-#         context = Context(buffer)
-
-#         # Render the template with the context
-#         template = Template(mako_template)
-#         template.render_context(context)
-
-#         return context.classes
-#     except Exception as e:
-#         print( str(e) )
-
-#         return {}
 
 #### render named block
 def get_block( name, blocks ):
@@ -744,16 +714,47 @@ def make_answer( blocks, system, header, version, info, query, text, venv_base_d
             response_text = str(e)
     return response_text
 
-def resolve_image_url(image: str) -> str:
-    image_url = image.get("src")
-    if not (image_url.startswith("data") and image_url.startswith("http://") or image_url.startswith("https://")) and os.path.isfile(image_url):
+# def resolve_image_url(image: str) -> str:
+#     image_url = image.get("src")
+#     if not (image_url.startswith("data") and image_url.startswith("http://") or image_url.startswith("https://")) and os.path.isfile(image_url):
+#         try:
+#             with open(image_url, "rb") as img_file:
+#                 encoded_image = base64.b64encode(img_file.read()).decode('utf-8')
+#                 image_format = Image.open(image_url).format.lower()
+#                 return ImageUrl(url=f"data:image/{image_format};base64,{encoded_image}")
+#         except Exception as e:
+#             print(f"Error processing the image file: {e}")
+#     return ImageUrl(url=image_url)
+
+def resolve_image_url(image: Union[str, Mapping[str, Any]]) -> ImageUrl:
+    if isinstance(image, Mapping):
+        image_url = image.get("src")
+    else:
+        image_url = str(image)
+
+    if not image_url:
+        raise ValueError("No image path or URL provided.")
+
+    # Already a URL or data:-URL
+    if image_url.startswith(("http://", "https://", "data:")):
+        return ImageUrl(url=image_url)
+
+    # Local file → convert to base64 data URL
+    if os.path.isfile(image_url):
         try:
             with open(image_url, "rb") as img_file:
-                encoded_image = base64.b64encode(img_file.read()).decode('utf-8')
-                image_format = Image.open(image_url).format.lower()
-                return ImageUrl(url=f"data:image/{image_format};base64,{encoded_image}")
+                encoded = base64.b64encode(img_file.read()).decode("utf-8")
+
+            mime_type, _ = mimetypes.guess_type(image_url)
+            if mime_type is None:
+                mime_type = "image/png"  # fallback
+
+            return ImageUrl(url=f"data:{mime_type};base64,{encoded}")
         except Exception as e:
             print(f"Error processing the image file: {e}")
+            return ImageUrl(url=image_url)
+
+    # Fallback for unknown string
     return ImageUrl(url=image_url)
 
 def parse_markdown_to_qa_pairs(md_text: str):
