@@ -49,11 +49,17 @@ def test_qa_block(label, model_id, test_name, qa_list):
             response = agent.run_sync(q, message_history=message_history or None)
 
             actual = getattr(response, "output", str(response)).strip()
+
+            print ("ausgebe:" + str( response ))
+
             print(f"[DEBUG] [{label}][#{i}] Question: {q}")
             print(f"[DEBUG] Expected: {expected}")
             print(f"[DEBUG] Actual:   {actual}")
+            
+            # regex marker
+            MARK = "*"
 
-            if actual == expected or re.match(expected, actual):
+            if actual == expected or ( expected.startswith(MARK) and re.match(expected[len(MARK):-len(MARK)], actual) and expected.endswith(MARK)):
                 print(f"[DEBUG] ✅ Test passed.")
                 continue
             else:

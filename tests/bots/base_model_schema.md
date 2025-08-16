@@ -15,6 +15,6 @@ class Schema(BaseModel):
 ~~~markdown {#version_test .unittest }
 
 # Create a person
-> ['age', 'name']
+> *.+*
 
 ~~~

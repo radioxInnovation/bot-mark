@@ -52,7 +52,7 @@ Unit Test
 > fstring: ['any', 'goodbye_check']
 
 # Just a random note
-> format: .+any.+
+> *format: .+any.+*
 
 ~~~
 

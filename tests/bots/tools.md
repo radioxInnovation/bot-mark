@@ -49,13 +49,13 @@ def weather_forecast(city: str, days: int = 3) -> str:
 
 
 # What’s the temperature like in Berlin?
-> .+"temperature_fahrenheit".+69[.]8.+
+> *.+"temperature_fahrenheit".+69[.]8.+*
 
 # What’s the weather like in Berlin?
-> ^(?!.*"temperature_fahrenheit").*$
+> *^(?!.*"temperature_fahrenheit").*$*
 
 # Wie ist dr forecast in Berlin?
-> .+"weather_forecast".+Sunny.+
+> *.+"weather_forecast".+Sunny.+*
 
 ~~~
 
