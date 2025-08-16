@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import random
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type
 
@@ -11,10 +10,8 @@ from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.messages import ModelMessage
 
-
 import re, json, time, requests, os, sys, uuid, hashlib, httpx, mimetypes
 import urllib.parse, importlib, textwrap, inspect, subprocess, base64
-from pathlib import Path
 from io import StringIO
 
 import ast
@@ -30,18 +27,13 @@ import pydantic
 import pydantic_ai
 from pydantic_ai.tools import Tool
 from pydantic_ai import ImageUrl, BinaryContent
-from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets import CombinedToolset
 
-from jinja2 import Template as JinjaTemplate
-from mako.template import Template
-from mako.runtime import Context
-
 from PIL import Image
 
-from botmark.markdown_parser import parser
 from botmark.utils.logging import log_info
 
 def get_header( blocks, default_header ):
@@ -256,13 +248,13 @@ def get_schema( blocks, TOPICS ):
             structured = StructuredDict(schema_block.get("content")) 
             return structured
         elif schema_block.get("language") == "python":
-            new_classes = get_base_models(JinjaTemplate(textwrap.dedent("""
-                from typing import List
-                from pydantic import BaseModel, Field
-                TOPICS = {{topics}}
-                                                                        
-                {{schema}}
-            """)).render(schema=schema, topics=str( TOPICS )))
+            new_classes = get_base_models(f"""
+from typing import List
+from pydantic import BaseModel, Field
+TOPICS = {TOPICS}
+
+{schema}
+            """)
 
             named = new_classes.get(name, None)
             if named:
@@ -270,35 +262,64 @@ def get_schema( blocks, TOPICS ):
             return sorted(new_classes.items())[0] if new_classes else None
     return None
 
-def get_base_models ( code ):
+def get_base_models(code: str):
     try:
-        mako_template = JinjaTemplate(
-            textwrap.dedent("""
-                <%!
-                from typing import List
-                from pydantic import BaseModel, Field
-                {{code}}
-                %>
-                <%
-                import inspect
+        # Compile first for clearer syntax errors
+        compiled = compile(code, "<user_code>", "exec")
 
-                classes = {name: obj for name, obj in globals().items() if inspect.isclass(obj) and issubclass(obj, BaseModel) and name != 'BaseModel'}    
-                context.classes = classes
-                %>""")
-            ).render( code=code )
+        # Isolated namespace for execution
+        ns = {}
 
-        # Create a buffer and context
-        buffer = StringIO()
-        context = Context(buffer)
+        # Execute user code
+        exec(compiled, ns, ns)
 
-        # Render the template with the context
-        template = Template(mako_template)
-        template.render_context(context)
+        # Import after exec so our check is against the real pydantic BaseModel
+        try:
+            from pydantic import BaseModel
+        except ImportError:
+            print("⚠️ 'pydantic' is not installed; install with `pip install pydantic`.")
+            return {}
 
-        return context.classes
+        # Gather all subclasses of BaseModel defined by the code
+        classes = {
+            name: obj
+            for name, obj in ns.items()
+            if inspect.isclass(obj) and issubclass(obj, BaseModel) and obj is not BaseModel
+        }
+        return classes
+
     except Exception as e:
-        print( str(e) )
+        print(str(e))
         return {}
+
+# def get_base_models ( code ):
+#     try:
+#         mako_template = textwrap.dedent(f"""
+#                 <%!
+#                 from typing import List
+#                 from pydantic import BaseModel, Field
+#                 {code}
+#                 %>
+#                 <%
+#                 import inspect
+
+#                 classes = {{name: obj for name, obj in globals().items() if inspect.isclass(obj) and issubclass(obj, BaseModel) and name != 'BaseModel'}}    
+#                 context.classes = classes
+#                 %>""")
+
+#         # Create a buffer and context
+#         buffer = StringIO()
+#         context = Context(buffer)
+
+#         # Render the template with the context
+#         template = Template(mako_template)
+#         template.render_context(context)
+
+#         return context.classes
+#     except Exception as e:
+#         print( str(e) )
+
+#         return {}
 
 #### render named block
 def get_block( name, blocks ):
@@ -429,21 +450,61 @@ def render_template_in_venv( template_str, data, packages=[], venv_base_dir= "/d
 
     return result
 
-def render_block( block, data = None, venv_base_dir= "/data/venvs"):
-    create_directory( venv_base_dir )
-    packages = parse_packages ( block.get( "attributes", {}).get("packages", "" ) )
+def render_fstring(template: str, context: dict) -> str:
+    # NOTE: This uses eval to get full f-string power. Only safe if templates are trusted.
+    f_template = f"f'''{template}'''"
+    return eval(f_template, {}, context)
+
+def render_format(template: str, context: dict) -> str:
+    return template.format(**context)
+
+def render_block(block, data=None, venv_base_dir="/data/venvs"):
+    create_directory(venv_base_dir)
+    packages = parse_packages(block.get("attributes", {}).get("packages", ""))
 
     content = block.get("content", "")
+    lang = (block.get("language", "") or "").lower()
+
+    # normalize context
+    context = data if isinstance(data, dict) else {"data": data}
+
     try:
-        if block.get( "language", "" ) == "mako" and isinstance( data, dict) :
-            if len( packages ) > 0:
-                return render_template_in_venv( content, data, packages= packages, venv_base_dir= venv_base_dir )
+        if lang == "mako" and isinstance(data, dict):
+            if len(packages) > 0:
+                return render_template_in_venv(content, data, packages=packages, venv_base_dir=venv_base_dir)
             else:
-                return Template( content ).render( **data )
-        elif block.get( "language", "" ) == "jinja2" and isinstance( data, dict):
-            return JinjaTemplate( content ).render( **data )
+                try:
+                    from mako.template import Template as MakoTemplate
+                except ImportError:
+                    return "⚠️  'mako' is not installed; install with 'pip install Mako' or the extra 'botmark[mako]'."
+                return MakoTemplate(content).render(**data)
+
+        elif lang == "jinja2" and isinstance(data, dict):
+            try:
+                from jinja2 import Template as JinjaTemplate
+            except ImportError:
+                return "⚠️  'Jinja2' is not installed; install with 'pip install Jinja2' or the extra 'botmark[jinja2]'."
+            return JinjaTemplate(content).render(**data)
+
+        elif lang == "fstring":
+            # Allow `{...}` expressions without requiring a leading f in user input
+            try:
+                return render_fstring(content, context)
+            except Exception as e:
+                return f"⚠️ fstring render error: {e}"
+
+        elif lang in ("format", "str.format"):
+            try:
+                return render_format(content, context)
+            except KeyError as e:
+                return f"⚠️ format placeholder not found in context: {e}"
+            except Exception as e:
+                return f"⚠️ format render error: {e}"
+
     except Exception as e:
         return str(e)
+
+    # Fallback: return raw content unchanged
     return content
 
 def render_named_block(name, blocks, system, header, version, info, query, topics, venv_base_dir, data={} ):

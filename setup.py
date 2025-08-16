@@ -1,14 +1,4 @@
 import setuptools
-import os
-import re
-
-# def find_version():
-#     with open(os.path.join("botmark", "__init__.py"), encoding="utf-8") as f:
-#         content = f.read()
-#     match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", content, re.M)
-#     if match:
-#         return match.group(1)
-#     raise RuntimeError("Version not found in __init__.py")
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -32,16 +22,35 @@ setuptools.setup(
     python_requires=">=3.11",
     install_requires=[
         "httpx>=0.28.1",
-        "Jinja2>=3.1.6",
-        "Mako>=1.3.10",
         "markdown-it-py>=3.0.0",
         "mdit_py_plugins>=0.4.2",
         "Pillow>=11.3.0",
         "pydantic>=2.11.7",
-        "pydantic_ai[logfire]>=0.4.8",
-        "python-dotenv>=1.1.1",
+        "pydantic_ai>=0.4.8",
         "python_frontmatter>=1.1.0",
         "PyYAML>=6.0.2",
         "requests>=2.32.4",
     ],
+
+    # Optional dependencies, grouped by feature
+    extras_require={
+        # Template engines
+        "jinja2": ["Jinja2>=3.1.6"],
+        "mako": ["Mako>=1.3.10"],
+        "templates": ["Jinja2>=3.1.6", "Mako>=1.3.10"],
+
+        # Logging support
+        "logfire": ["logfire"],
+
+        # .env file support
+        "dotenv": ["python-dotenv>=1.1.1"],
+
+        # "all" installs every optional extra
+        "all": [
+            "Jinja2>=3.1.6",
+            "Mako>=1.3.10",
+            "logfire",
+            "python-dotenv>=1.1.1",
+        ],
+    }
 )

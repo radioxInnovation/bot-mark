@@ -1,7 +1,6 @@
 import json, os, unittest, re, time
 import asyncio
 from pathlib import Path
-from dotenv import load_dotenv
 from typing import Any, Optional, Union, TextIO, Dict
 from pydantic import BaseModel
 
@@ -15,10 +14,16 @@ from pydantic_ai.messages import (
 
 from .markdown_parser import parser
 from .responder import engine
-import logfire as logfire_global
 
 from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_llm_model, get_toolset, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*args, **kwargs):
+        print("⚠️  python-dotenv is not installed; environment files (.env) will be ignored.")
+        return None
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(dotenv_path=os.path.join(script_dir, '.env'))
@@ -53,16 +58,19 @@ class BotMarkAgent(Agent[Any, Any]):
     def get_info( self ):
         return self.botmark_json.get("info", "<p>info not found</p>")
     
-    def _init_logfire_instance( self ):
+    def _init_logfire_instance(self):
         try:
-            monitoring = ( self.botmark_json or {}).get("header", {}).get("monitoring", {} )
+            logging = (self.botmark_json or {}).get("header", {}).get("logging", {})
+            if "logfire" in logging:
+                import logfire  # only import if needed
 
-            if "logfire" in monitoring.keys():
-                lf = logfire_global.configure( **monitoring.get("logfire", {}) )
+                lf = logfire.configure(**logging.get("logfire", {}))
                 lf.instrument_pydantic_ai()
                 return lf
+        except ImportError:
+            print("⚠️  logfire is not installed; logging is disabled.")
         except Exception as e:
-            print ( str (e) )
+            print(str(e))
 
     def get_tests(self):
         test_cases = []
@@ -350,10 +358,24 @@ class BotManager:
             pass
 
         if not self.allow_code_execution:
-            bot_json["codeblocks"] = [
-                block for block in bot_json.get("codeblocks", [])
-                if block.get("language") not in ("mako", "python")
-            ]
+            disallowed = {"mako", "python", "fstring"}
+            kept = []
+
+            for i, block in enumerate(bot_json.get("codeblocks", []) or []):
+                lang = (block.get("language") or "").lower()
+                if lang in disallowed:
+                    ident = (
+                        block.get("id")
+                        or block.get("name")
+                        or (block.get("attributes") or {}).get("id")
+                        or (block.get("attributes") or {}).get("name")
+                        or f"index:{i}"
+                    )
+                    print(f"⚠️ allow_code_execution=False — filtered codeblock '{ident}' (language='{lang}')")
+                else:
+                    kept.append(block)
+
+            bot_json["codeblocks"] = kept
 
         agent_kwargs = {
             "botmark_json": bot_json,

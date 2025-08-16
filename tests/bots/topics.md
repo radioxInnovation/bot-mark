@@ -16,8 +16,12 @@ Topics
 Responses
 =========
 
-~~~mako {#response}
+~~~mako {#response match= "greeting or number_check or email_format"}
 ${sorted([t for t, v in TOPICS.items() if v])}
+~~~
+
+~~~jinja2 {#response}
+{{ TOPICS | dictsort | selectattr('1') | map(attribute=0) | list }}
 ~~~
 
 Unit Test
