@@ -21,19 +21,18 @@ setuptools.setup(
     ],
     python_requires=">=3.11",
     install_requires=[
-        "httpx>=0.28.1",
         "markdown-it-py>=3.0.0",
         "mdit_py_plugins>=0.4.2",
-        "Pillow>=11.3.0",
         "pydantic>=2.11.7",
         "pydantic_ai>=0.4.8",
         "python_frontmatter>=1.1.0",
         "PyYAML>=6.0.2",
-        "requests>=2.32.4",
     ],
 
     # Optional dependencies, grouped by feature
     extras_require={
+        "remote-files": ["requests>=2.32.4"],
+
         # Template engines
         "jinja2": ["Jinja2>=3.1.6"],
         "mako": ["Mako>=1.3.10"],

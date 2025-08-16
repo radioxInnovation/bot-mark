@@ -6,12 +6,13 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Mapping, 
 
 # pydantic / pydantic-ai
 from pydantic import BaseModel, Field, create_model
-from pydantic_ai import Agent, StructuredDict
+from pydantic_ai import Agent, StructuredDict, DocumentUrl
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.messages import ModelMessage
 
-import re, json, time, requests, os, sys, uuid, hashlib, httpx, mimetypes
+import re, json, time, os, sys, uuid, hashlib, mimetypes
 import urllib.parse, importlib, textwrap, inspect, subprocess, base64
+
 
 import ast
 import operator
@@ -19,7 +20,7 @@ import operator
 #from openai.types.responses import WebSearchToolParam
 
 import yaml
-import importlib.util, os
+import importlib.util
 import concurrent.futures
 
 import pydantic
@@ -30,8 +31,6 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.toolsets import CombinedToolset
-
-#from PIL import Image
 
 from botmark.utils.logging import log_info
 
@@ -227,9 +226,7 @@ def process_links(links, predicate):
                 # 3. HTTP/HTTPS-URL
                 elif href.startswith("http://") or href.startswith("https://"):
                     try:
-                        mime_type, _ = mimetypes.guess_type(href)
-                        response = httpx.get(href)
-                        valid_links.append(BinaryContent(data=response.content, media_type=mime_type or "application/octet-stream"))
+                        valid_links.append( DocumentUrl ( url=href) )
                     except Exception as e:
                         print(f"Error fetching URL: {e}")
 
@@ -531,10 +528,27 @@ def get_tests( blocks ):
 
 
 ###### get_blocks 
-def read_file_content(file_path, timeout=10, is_binary = False ):
+class RemoteFetchError(Exception):
+    """Raised when fetching a remote file fails."""
+
+def read_file_content(file_path: str, timeout: float = 10, is_binary: bool = False) -> Optional[Union[str, bytes]]:
+    """
+    Read content from a local or remote file.
+
+    - If `file_path` starts with http(s), fetch it over the network (using a lazy import of `requests`).
+    - Otherwise, read it from disk. If a relative path doesn't exist, also try resolving it
+      relative to the installed `botmark` package directory.
+
+    Args:
+        file_path: Path or URL of the file to read.
+        timeout:   Timeout in seconds for both local read (via thread) and HTTP GET.
+        is_binary: If True, return bytes; otherwise return str (UTF-8 for local files).
+
+    Returns:
+        The file content (str or bytes) on success, or None on failure.
+    """
 
     def read_local_file():
-
         def get_botmark_dir():
             spec = importlib.util.find_spec("botmark")
             if spec and spec.origin:
@@ -543,11 +557,11 @@ def read_file_content(file_path, timeout=10, is_binary = False ):
 
         print("[DEBUG] Trying to read file:", file_path)
 
-        # Try direct path first
+        # Try the direct path first
         if os.path.exists(file_path):
             target_path = file_path
         else:
-            # If file not found and path is relative, try relative to botmark package
+            # If not found and the path is relative, try resolving relative to botmark
             if not os.path.isabs(file_path):
                 try:
                     botmark_dir = get_botmark_dir()
@@ -567,32 +581,105 @@ def read_file_content(file_path, timeout=10, is_binary = False ):
         kwargs = {} if is_binary else {"encoding": "utf-8"}
 
         with open(target_path, mode, **kwargs) as f:
-            content = f.read() 
-            return content
+            return f.read()
 
     def read_remote_file():
-        response = requests.get(file_path, timeout=timeout)
-        response.raise_for_status()
-        return response.content if is_binary else response.text
+        try:
+            import requests  # Lazy import so the dependency is optional
+        except ImportError as e:
+            raise RemoteFetchError(
+                "The 'requests' package is required to read remote URLs but is not installed."
+            ) from e
+
+        try:
+            response = requests.get(file_path, timeout=timeout)
+            response.raise_for_status()
+            return response.content if is_binary else response.text
+        except Exception as e:
+            # Don’t leak requests-specific types to the outer scope
+            raise RemoteFetchError(str(e)) from e
 
     try:
         if file_path.startswith(("http://", "https://")):
             return read_remote_file()
         else:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit( read_local_file )
+                future = executor.submit(read_local_file)
                 return future.result(timeout=timeout)
 
     except FileNotFoundError as e:
         print(e)
     except concurrent.futures.TimeoutError:
         print(f"Error: Reading file timed out: {file_path}")
-    except requests.RequestException as e:    
+    except RemoteFetchError as e:
         print(f"Error fetching file from URL: {file_path} - {e}")
     except Exception as e:
         print(f"Error reading file: {file_path} - {e}")
 
     return None
+
+# def read_file_content(file_path, timeout=10, is_binary = False ):
+
+#     def read_local_file():
+
+#         def get_botmark_dir():
+#             spec = importlib.util.find_spec("botmark")
+#             if spec and spec.origin:
+#                 return os.path.dirname(spec.origin)
+#             raise ImportError("botmark package not found")
+
+#         print("[DEBUG] Trying to read file:", file_path)
+
+#         # Try direct path first
+#         if os.path.exists(file_path):
+#             target_path = file_path
+#         else:
+#             # If file not found and path is relative, try relative to botmark package
+#             if not os.path.isabs(file_path):
+#                 try:
+#                     botmark_dir = get_botmark_dir()
+#                     alt_path = os.path.join(botmark_dir, file_path)
+#                     print("[DEBUG] Trying alternate path:", alt_path)
+#                     if os.path.exists(alt_path):
+#                         target_path = alt_path
+#                     else:
+#                         raise FileNotFoundError(f"File not found: {file_path} or {alt_path}")
+#                 except ImportError as e:
+#                     print(e)
+#                     raise FileNotFoundError(f"File not found: {file_path} (botmark dir not found)")
+#             else:
+#                 raise FileNotFoundError(f"File not found: {file_path}")
+
+#         mode = "rb" if is_binary else "r"
+#         kwargs = {} if is_binary else {"encoding": "utf-8"}
+
+#         with open(target_path, mode, **kwargs) as f:
+#             content = f.read() 
+#             return content
+
+#     def read_remote_file():
+#         response = requests.get(file_path, timeout=timeout)
+#         response.raise_for_status()
+#         return response.content if is_binary else response.text
+
+#     try:
+#         if file_path.startswith(("http://", "https://")):
+#             return read_remote_file()
+#         else:
+#             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+#                 future = executor.submit( read_local_file )
+#                 return future.result(timeout=timeout)
+
+#     except FileNotFoundError as e:
+#         print(e)
+#     except concurrent.futures.TimeoutError:
+#         print(f"Error: Reading file timed out: {file_path}")
+#     except requests.RequestException as e:    
+#         print(f"Error fetching file from URL: {file_path} - {e}")
+#     except Exception as e:
+#         print(f"Error reading file: {file_path} - {e}")
+
+#     return None
 
 def parse_data_url(data_url):
     # Remove the 'data:' prefix
