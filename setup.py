@@ -21,12 +21,8 @@ setuptools.setup(
     ],
     python_requires=">=3.11",
     install_requires=[
-        "markdown-it-py>=3.0.0",
-        "mdit_py_plugins>=0.4.2",
         "pydantic>=2.11.7",
         "pydantic_ai>=0.4.8",
-        "python_frontmatter>=1.1.0",
-        "PyYAML>=6.0.2",
     ],
 
     # Optional dependencies, grouped by feature
@@ -50,6 +46,7 @@ setuptools.setup(
             "Mako>=1.3.10",
             "logfire",
             "python-dotenv>=1.1.1",
+            "requests>=2.32.4",
         ],
     }
 )
