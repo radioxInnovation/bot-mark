@@ -714,19 +714,8 @@ def make_answer( blocks, system, header, version, info, query, text, venv_base_d
             response_text = str(e)
     return response_text
 
-# def resolve_image_url(image: str) -> str:
-#     image_url = image.get("src")
-#     if not (image_url.startswith("data") and image_url.startswith("http://") or image_url.startswith("https://")) and os.path.isfile(image_url):
-#         try:
-#             with open(image_url, "rb") as img_file:
-#                 encoded_image = base64.b64encode(img_file.read()).decode('utf-8')
-#                 image_format = Image.open(image_url).format.lower()
-#                 return ImageUrl(url=f"data:image/{image_format};base64,{encoded_image}")
-#         except Exception as e:
-#             print(f"Error processing the image file: {e}")
-#     return ImageUrl(url=image_url)
-
 def resolve_image_url(image: Union[str, Mapping[str, Any]]) -> ImageUrl:
+
     if isinstance(image, Mapping):
         image_url = image.get("src")
     else:

@@ -148,6 +148,7 @@ class BotMarkAgent(Agent[Any, Any]):
 
             if not answer:
 
+
                 active_schema = get_schema(active_blocks, topics )
 
                 VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
@@ -159,11 +160,7 @@ class BotMarkAgent(Agent[Any, Any]):
 
                 active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
                 active_prompt = active_blocks.get("prompt")
-                final_query = render_block(active_prompt, {"QUERY": user_text}) if active_prompt else user_text
-
-                query_objects = parser.parse_to_json(final_query) if active_header.get("inspect_user_prompt", False) is True else {}
-                query_images = get_images(query_objects.get("images", []), lambda x: True)
-                query_links, _ = process_links(query_objects.get("links", []), lambda x: True)
+                final_query = render_block(active_prompt, {"QUERY": user_text}) if active_prompt else user_text                
                 active_system = render_named_block(
                     "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {}
                 )
@@ -172,6 +169,11 @@ class BotMarkAgent(Agent[Any, Any]):
 
             if answer is None:
                 active_toolset = get_toolset(active_blocks)
+
+                query_objects = parser.parse_to_json(final_query) if active_header.get("inspect_user_prompt", False) is True else {}
+                query_images = get_images(query_objects.get("images", []), lambda x: True)
+                query_links, _ = process_links(query_objects.get("links", []), lambda x: True)
+
                 predicate = lambda block: interpret_bool_expression(block.get("match"), topics) >= 0
 
                 active_images = get_images(self.botmark_json.get("images", []), predicate)
@@ -444,7 +446,6 @@ class BotManager:
 
         return self.response_parser( response )
     
-
     async def respond(self, json_payload: Dict) -> str:
         """
         Async counterpart to respond_sync: prepares payload, selects the agent,
