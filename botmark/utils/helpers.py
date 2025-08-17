@@ -19,7 +19,9 @@ import operator
 
 #from openai.types.responses import WebSearchToolParam
 
-import yaml
+from .yaml_parser import yaml
+#import yaml
+
 import importlib.util
 import concurrent.futures
 
@@ -615,69 +617,6 @@ def read_file_content(file_path: str, timeout: float = 10, is_binary: bool = Fal
         print(f"Error reading file: {file_path} - {e}")
 
     return None
-
-# def read_file_content(file_path, timeout=10, is_binary = False ):
-
-#     def read_local_file():
-
-#         def get_botmark_dir():
-#             spec = importlib.util.find_spec("botmark")
-#             if spec and spec.origin:
-#                 return os.path.dirname(spec.origin)
-#             raise ImportError("botmark package not found")
-
-#         print("[DEBUG] Trying to read file:", file_path)
-
-#         # Try direct path first
-#         if os.path.exists(file_path):
-#             target_path = file_path
-#         else:
-#             # If file not found and path is relative, try relative to botmark package
-#             if not os.path.isabs(file_path):
-#                 try:
-#                     botmark_dir = get_botmark_dir()
-#                     alt_path = os.path.join(botmark_dir, file_path)
-#                     print("[DEBUG] Trying alternate path:", alt_path)
-#                     if os.path.exists(alt_path):
-#                         target_path = alt_path
-#                     else:
-#                         raise FileNotFoundError(f"File not found: {file_path} or {alt_path}")
-#                 except ImportError as e:
-#                     print(e)
-#                     raise FileNotFoundError(f"File not found: {file_path} (botmark dir not found)")
-#             else:
-#                 raise FileNotFoundError(f"File not found: {file_path}")
-
-#         mode = "rb" if is_binary else "r"
-#         kwargs = {} if is_binary else {"encoding": "utf-8"}
-
-#         with open(target_path, mode, **kwargs) as f:
-#             content = f.read() 
-#             return content
-
-#     def read_remote_file():
-#         response = requests.get(file_path, timeout=timeout)
-#         response.raise_for_status()
-#         return response.content if is_binary else response.text
-
-#     try:
-#         if file_path.startswith(("http://", "https://")):
-#             return read_remote_file()
-#         else:
-#             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-#                 future = executor.submit( read_local_file )
-#                 return future.result(timeout=timeout)
-
-#     except FileNotFoundError as e:
-#         print(e)
-#     except concurrent.futures.TimeoutError:
-#         print(f"Error: Reading file timed out: {file_path}")
-#     except requests.RequestException as e:    
-#         print(f"Error fetching file from URL: {file_path} - {e}")
-#     except Exception as e:
-#         print(f"Error reading file: {file_path} - {e}")
-
-#     return None
 
 def parse_data_url(data_url):
     # Remove the 'data:' prefix

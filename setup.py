@@ -73,7 +73,6 @@ setuptools.setup(
     python_requires=">=3.11",
     install_requires=[
         f"pydantic-ai-slim>={PAI_VERSION}",
-        "PyYAML>=6.0.2",
     ],
     extras_require=extras,
 )

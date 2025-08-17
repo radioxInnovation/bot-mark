@@ -1,5 +1,7 @@
 import html, re, time
-import yaml
+#import yaml
+from ..utils.yaml_parser import yaml
+
 from .renderer import md, parse_attributes
 
 from ..utils.helpers import CodeBlock, read_file_content
