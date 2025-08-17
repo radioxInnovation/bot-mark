@@ -1,5 +1,5 @@
-import html, re, frontmatter, time
-
+import html, re, time
+import yaml
 from .renderer import md, parse_attributes
 
 from ..utils.helpers import CodeBlock, read_file_content
@@ -280,29 +280,65 @@ def get_named_items(md_text):
     return { "header": frontmatter_header, "codeblocks": codeblocks, "images": images, "links": links, "tables": tables, "graphs": graphs, "info": md.renderer.render(info_tokens, md.options, {}) }
 
 def get_header_and_content(markdown_text: str):
-    # Define regex patterns for flexible MARKBOT START and END markers
+    """
+    Extract metadata (YAML front matter) and content between BOTMARK markers.
+    Falls back gracefully if no front matter is present.
+    """
     start_pattern = r"<!--\s*BOTMARK\s*START\s*-->"
     end_pattern = r"<!--\s*BOTMARK\s*END\s*-->"
 
-    # Find the positions of the markers
     start_match = re.search(start_pattern, markdown_text, re.IGNORECASE)
     end_match = re.search(end_pattern, markdown_text, re.IGNORECASE)
 
-    # Calculate slicing indices
     start_index = start_match.end() if start_match else 0
     end_index = end_match.start() if end_match else len(markdown_text)
 
-    # Extract the block between the markers
     extracted = markdown_text[start_index:end_index].strip()
 
-    try:
-        post = frontmatter.loads(extracted)
-        metadata = post.metadata
-        content = post.content
-        return metadata, content
-    except Exception as e:
-        log_info(f"⚠️ frontmatter parse error: {e}")
-        return {}, extracted
+    metadata = {}
+    content = extracted
+
+    # Check for YAML front matter style: ---\n...\n---
+    fm_pattern = r"^---\s*\n(.*?)\n---\s*\n?(.*)$"
+    fm_match = re.match(fm_pattern, extracted, re.DOTALL)
+
+    if fm_match:
+        yaml_block, body = fm_match.groups()
+        try:
+            metadata = yaml.safe_load(yaml_block) or {}
+            content = body.strip()
+        except Exception as e:
+            # You can replace log_info with print or logging
+            print(f"⚠️ YAML parse error: {e}")
+            metadata = {}
+            content = extracted
+
+    return metadata, content
+
+# def get_header_and_content(markdown_text: str):
+#     # Define regex patterns for flexible MARKBOT START and END markers
+#     start_pattern = r"<!--\s*BOTMARK\s*START\s*-->"
+#     end_pattern = r"<!--\s*BOTMARK\s*END\s*-->"
+
+#     # Find the positions of the markers
+#     start_match = re.search(start_pattern, markdown_text, re.IGNORECASE)
+#     end_match = re.search(end_pattern, markdown_text, re.IGNORECASE)
+
+#     # Calculate slicing indices
+#     start_index = start_match.end() if start_match else 0
+#     end_index = end_match.start() if end_match else len(markdown_text)
+
+#     # Extract the block between the markers
+#     extracted = markdown_text[start_index:end_index].strip()
+
+#     try:
+#         post = frontmatter.loads(extracted)
+#         metadata = post.metadata
+#         content = post.content
+#         return metadata, content
+#     except Exception as e:
+#         log_info(f"⚠️ frontmatter parse error: {e}")
+#         return {}, extracted
 
 def parse_attrs(attr_block: str) -> dict:
     #md = MarkdownIt("commonmark").use(attrs_plugin)

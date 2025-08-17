@@ -73,7 +73,6 @@ setuptools.setup(
         "pydantic>=2.11.7",
         f"pydantic-ai-slim>={PAI_VERSION}",
         "PyYAML>=6.0.2",
-        "python-frontmatter",
     ],
     extras_require=extras,
 )
