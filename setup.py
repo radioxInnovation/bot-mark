@@ -34,6 +34,7 @@ extras = {
     "templates": ["Jinja2>=3.1.6", "Mako>=1.3.10"],
     "dotenv": ["python-dotenv>=1.1.1"],
     "pydantic_ai": [f"pydantic-ai[all]>={PAI_VERSION}"],
+    "pydantic": ["pydantic"],
 }
 
 # forward all slim extras
@@ -46,6 +47,7 @@ extras["all"] = [
     "Mako>=1.3.10",
     "python-dotenv>=1.1.1",
     "requests>=2.32.4",
+    "pydantic",
 ] + [f"pydantic-ai-slim[{extra}]>={PAI_VERSION}" for extra in pai_extras]
 
 setuptools.setup(
@@ -70,7 +72,6 @@ setuptools.setup(
     ],
     python_requires=">=3.11",
     install_requires=[
-        "pydantic>=2.11.7",
         f"pydantic-ai-slim>={PAI_VERSION}",
         "PyYAML>=6.0.2",
     ],
