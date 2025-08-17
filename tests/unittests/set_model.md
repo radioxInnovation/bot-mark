@@ -2,6 +2,9 @@
 title: test model
 model:
   type: test.TestModel
+requirements: mako
+options:
+    allow_code_execution: True 
 ---
 
 # System Prompt

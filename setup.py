@@ -70,8 +70,6 @@ setuptools.setup(
     ],
     python_requires=">=3.11",
     install_requires=[
-        "markdown-it-py>=3.0.0",
-        "mdit_py_plugins>=0.4.2",
         "pydantic>=2.11.7",
         f"pydantic-ai-slim>={PAI_VERSION}",
         "PyYAML>=6.0.2",

@@ -1,7 +1,6 @@
 import html, re, frontmatter, time
-from markdown_it import MarkdownIt
-from mdit_py_plugins.attrs import attrs_plugin
-from mdit_py_plugins.container import container_plugin
+
+from .renderer import md, parse_attributes
 
 from ..utils.helpers import CodeBlock, read_file_content
 
@@ -159,8 +158,8 @@ def find_valid_paths(graph, max_depth, max_seconds=0.1, max_paths=None):
     return sorted(valid_paths, key=len)
 
 def get_named_items(md_text):
-    md = MarkdownIt("commonmark").use(attrs_plugin).use(container_plugin, "info") .enable("fence").enable("table")
-    md.validateLink = lambda url: True
+    #md = MarkdownIt("commonmark").use(attrs_plugin).use(container_plugin, "info") .enable("fence").enable("table")
+    #md.validateLink = lambda url: True
     frontmatter_header, content_with_comment = get_header_and_content(md_text)
     content = re.sub(r'<!--.*?-->', '', content_with_comment, flags=re.DOTALL)
     tokens = md.parse( content )
@@ -306,8 +305,8 @@ def get_header_and_content(markdown_text: str):
         return {}, extracted
 
 def parse_attrs(attr_block: str) -> dict:
-    md = MarkdownIt("commonmark").use(attrs_plugin)
-    get_attrs = lambda x: md.parse(x)[1].children[0].attrs
+    #md = MarkdownIt("commonmark").use(attrs_plugin)
+    get_attrs = parse_attributes #lambda x: md.parse(x)[1].children[0].attrs
     attrs = list(map(get_attrs, [f'[](){attr_block.strip()}', f'![](){attr_block.strip()}' ]))
     common_keys = set(attrs[0]).intersection(*[d.keys() for d in attrs[1:]])
     return {k: attrs[0][k] for k in common_keys}

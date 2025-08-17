@@ -1,5 +1,8 @@
 ---
 title: Topic Echo Bot
+requirements: mako
+options:
+    allow_code_execution: True 
 ---
 
 Topics

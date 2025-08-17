@@ -1,5 +1,8 @@
 ---
 title: Topic Echo Bot
+requirements: mako, jinja2
+options:
+    allow_code_execution: True    
 ---
 
 Topics
@@ -32,8 +35,6 @@ fstring: {sorted([t for t, v in TOPICS.items() if v])}
 format: {TOPICS}
 ~~~
 
-
-
 Unit Test
 =========
 
@@ -55,4 +56,3 @@ Unit Test
 > *format: .+any.+*
 
 ~~~
-

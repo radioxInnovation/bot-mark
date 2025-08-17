@@ -1,5 +1,5 @@
 ---
-title: Inspect User Prompt 
+title: Inspect User Prompt
 inspect_user_prompt: True
 ---
 

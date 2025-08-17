@@ -1,6 +1,9 @@
 ---
 title: Info
 version: 1.0
+requirements: mako
+options:
+    allow_code_execution: True 
 ---
 
 :::: info

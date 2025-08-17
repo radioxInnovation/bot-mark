@@ -149,8 +149,6 @@ class BotMarkAgent(Agent[Any, Any]):
                 )
 
             if not answer:
-
-
                 active_schema = get_schema(active_blocks, topics )
 
                 VENV_BASE_DIR = active_header.get("VENV_BASE_DIR", os.getenv("VENV_BASE_DIR", "/data/venvs"))
@@ -355,7 +353,7 @@ class BotManager:
     def get_agent( self, bot_definition: Union[str, dict] ):
 
         bot_json = bot_definition if isinstance(bot_definition, dict) else parser.parse_to_json(bot_definition )
-
+        
         try:
             bot_json = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", "{}" ))  | bot_json
         except:

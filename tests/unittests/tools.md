@@ -2,6 +2,9 @@
 title: Weather Tool Bot
 subtitle: Simple Conversational AI for Weather Queries
 abstract: A minimal test suite for a conversational AI bot that provides the current temperature, weather conditions, and forecasts for requested locations.
+requirements: mako
+options:
+    allow_code_execution: True
 ---
 
 # System Prompt
@@ -58,6 +61,3 @@ def weather_forecast(city: str, days: int = 3) -> str:
 > *.+"weather_forecast".+Sunny.+*
 
 ~~~
-
-# test
-

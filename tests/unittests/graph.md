@@ -1,5 +1,8 @@
 ---
 title: Graph Usage
+requirements: mako
+options:
+    allow_code_execution: True
 ---
 
 # Main Agent

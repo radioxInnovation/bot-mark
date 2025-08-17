@@ -1,5 +1,8 @@
 ---
 title: Compare Versions
+requirements: mako
+options:
+    allow_code_execution: True
 ---
 
 ~~~markdown {#version_test .unittest }
