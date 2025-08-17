@@ -28,14 +28,11 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 # Optional dependencies
 extras = {
-    # your existing features
     "remote-files": ["requests>=2.32.4"],
     "jinja2": ["Jinja2>=3.1.6"],
     "mako": ["Mako>=1.3.10"],
     "templates": ["Jinja2>=3.1.6", "Mako>=1.3.10"],
     "dotenv": ["python-dotenv>=1.1.1"],
-
-    # full pydantic-ai (instead of slim)
     "pydantic_ai": [f"pydantic-ai[all]>={PAI_VERSION}"],
 }
 
@@ -62,9 +59,10 @@ setuptools.setup(
     url="https://www.radiox-innovation.de/",
     packages=setuptools.find_packages(),
     include_package_data=True,
-    license="MIT",
+    license="MIT",  # SPDX expression
+    license_files=["LICENSE"],  # ensure LICENSE file is included
     classifiers=[
-        "License :: OSI Approved :: MIT License",
+        # Removed deprecated license classifier
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3 :: Only",
@@ -72,8 +70,12 @@ setuptools.setup(
     ],
     python_requires=">=3.11",
     install_requires=[
+        "markdown-it-py>=3.0.0",
+        "mdit_py_plugins>=0.4.2",
         "pydantic>=2.11.7",
         f"pydantic-ai-slim>={PAI_VERSION}",
+        "PyYAML>=6.0.2",
+        "python-frontmatter",
     ],
     extras_require=extras,
 )

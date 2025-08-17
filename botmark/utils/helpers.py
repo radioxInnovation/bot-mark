@@ -27,7 +27,6 @@ import pydantic
 import pydantic_ai
 from pydantic_ai.tools import Tool
 from pydantic_ai import ImageUrl, BinaryContent
-from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset, CombinedToolset
 
@@ -905,6 +904,7 @@ def get_llm_model(model_data):
         return instantiate_filtered(model_cls, model_data, provider_instance)
 
     elif isinstance (model_data, str ):
+        from pydantic_ai.models.openai import OpenAIResponsesModel
         return OpenAIResponsesModel( model_name = model_data )
     else:
         return TestModel()

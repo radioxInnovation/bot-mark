@@ -1,2 +1,3 @@
 include README.md
+include LICENSE
 global-exclude *.so *.pyd *.dll *.dylib

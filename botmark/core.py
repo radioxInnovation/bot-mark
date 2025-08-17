@@ -16,7 +16,9 @@ from .markdown_parser import parser
 from .responder import engine
 
 from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_llm_model, get_toolset, render_block, render_named_block, try_answer, make_answer
-from . import __version__ as VERSION
+#from . import __version__ as 
+
+VERSION = "1.1.0"
 
 try:
     from dotenv import load_dotenv
