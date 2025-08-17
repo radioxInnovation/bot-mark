@@ -10,7 +10,7 @@ from botmark import BotManager
 from botmark import FileSystemSource
 
 # Optional path override via environment variable
-BOTMARK_DIR = Path(Path(__file__).parent / "bots").resolve()
+BOTMARK_DIR = Path(Path(__file__).parent / "unittests").resolve()
 
 botmark_source = FileSystemSource( BOTMARK_DIR )
 
