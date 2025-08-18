@@ -410,7 +410,7 @@ Write a e-mail to a friend
    from botmark import BotManager, FileSystemSource
 
    src = FileSystemSource(bot_dir="bots/")
-   mgr = BotManager(source=src, allow_system_prompt_fallback=True)
+   mgr = BotManager(botmark_source=src, allow_system_prompt_fallback=True)
 
    # List models (OpenAI-like shape)
    models = mgr.get_models()
@@ -453,7 +453,7 @@ You can also define **custom sources** (e.g., Langfuse, databases, APIs).
 from botmark import BotManager, FileSystemSource
 
 src = FileSystemSource(bot_dir="bots/")
-bot = BotManager(source=src)
+bot = BotManager(botmark_source=src)
 
 msg = {
   "model": "foo",
