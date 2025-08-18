@@ -52,7 +52,7 @@ extras["all"] = [
 
 setuptools.setup(
     name="botmark",
-    version="1.1.0",
+    version="1.1.1",
     author="Frank Rettig",
     author_email="118481987+frettig-radiox@users.noreply.github.com",
     description="BotMark – Define, run, and document LLM chatbots in plain Markdown. Framework for executable, portable, and LLM-agnostic chatbot workflows.",
