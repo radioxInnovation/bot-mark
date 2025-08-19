@@ -8,20 +8,20 @@ This **single source of truth** makes bots easier to maintain, version-control, 
 
 ## ✨ Why BotMark?
 
-- **One file = one bot** → prompts, schema, and docs stay in sync
-- **LLM-agnostic** → works with OpenAI, Claude, local models, or any API
-- **Version-friendly** → plain Markdown plays well with Git
-- **Executable** → run directly via Python’s `botmark` package
-- **Extensible** → add custom tools, topics, and agent graphs
+* **One file = one bot** → prompts, schema, and docs stay in sync
+* **LLM-agnostic** → works with OpenAI, Claude, local models, or any API
+* **Version-friendly** → plain Markdown plays well with Git
+* **Executable** → run directly via Python’s `botmark` package
+* **Extensible** → add custom tools, topics, and agent graphs
 
-| Feature                        | Description                                                                 |
-|-------------------------------|-----------------------------------------------------------------------------|
-| ✅ Markdown-based              | Bot definitions live in a structured Markdown format.                       |
-| ✅ LLM-agnostic                | Works with any LLM (e.g. OpenAI, Claude, local models).                     |
-| ✅ Executable in Python        | Easily run bots using the `botmark` Python package.                         |
-| ✅ Single source of truth      | One file defines bot behavior, schema, and user docs.                       |
-| ✅ Multi-bot support           | Load multiple bots via folder-based setup.                                  |
-| ✅ Easy export                 | Generate Word, HTML, or PDF docs using Pandoc.                              |
+| Feature                  | Description                                             |
+| ------------------------ | ------------------------------------------------------- |
+| ✅ Markdown-based         | Bot definitions live in a structured Markdown format.   |
+| ✅ LLM-agnostic           | Works with any LLM (e.g. OpenAI, Claude, local models). |
+| ✅ Executable in Python   | Easily run bots using the `botmark` Python package.     |
+| ✅ Single source of truth | One file defines bot behavior, schema, and user docs.   |
+| ✅ Multi-bot support      | Load multiple bots via folder-based setup.              |
+| ✅ Easy export            | Generate Word, HTML, or PDF docs using Pandoc.          |
 
 ---
 
@@ -135,12 +135,12 @@ pip install -e ".[openai,cli]"
 
 A BotMark file is just **Markdown** with special **code block attributes** to define:
 
-- **System prompt** – instructions for the LLM (`{#system}`)
-- **Response template** – output rendering (`{#response}`)
-- **Schema** – input validation (`{#schema}`)
-- **Optional tools** – Python functions callable by the bot (`.tool`)
-- **Optional graphs** – multi-agent workflows (`{#graph}`)
-- **Optional topics** – pattern-based routing
+* **System prompt** – instructions for the LLM (`{#system}`)
+* **Response template** – output rendering (`{#response}`)
+* **Schema** – input validation (`{#schema}`)
+* **Optional tools** – Python functions callable by the bot (`.tool`)
+* **Optional graphs** – multi-agent workflows (`{#graph}`)
+* **Optional topics** – pattern-based routing
 
 All of this is contained in a **single `.md` file**, making it versionable, testable, and human-readable.
 
@@ -158,15 +158,16 @@ Hello World 🌍
 
 ## 🧩 Quick Syntax Reference
 
-- **YAML frontmatter** → metadata (`title`, `model`, `abstract`, etc.)
-- **Code blocks** with `{#...}` → bot logic
-- **`.tool` blocks** → Python functions available to the bot
-- **`{#graph}`** → Mermaid diagrams defining agent flows
-- **Topics table** → optional regex/pattern routing
+* **YAML frontmatter** → metadata (`title`, `model`, `abstract`, etc.)
+* **Code blocks** with `{#...}` → bot logic
+* **`.tool` blocks** → Python functions available to the bot
+* **`{#graph}`** → Mermaid diagrams defining agent flows
+* **Topics table** → optional regex/pattern routing
 
 ---
 
 ### Example 1 – A Simple Email writer
+
 ```markdown
 ---
 title: Simple Email Writer
@@ -178,9 +179,11 @@ You are an assistant that writes short, friendly emails.
 After receiving feedback, update your draft and output the improved email.
 ~~~
 ```
+
 ---
 
 ### Example 2 – System, Response, Schema
+
 ```markdown
 ---
 title: Hello World Bot
@@ -247,27 +250,33 @@ Good question: {{ RESPONSE["message"] }}
 ```
 
 **Topics & Matching**
-- You can define **multiple topics**.
-- The `match` attribute supports **logical expressions**: `and`, `or`, `not`.
-  - Examples:
-    - `match="greeting and not goodbye"`
-    - `match="question or email_format"`
-    - `match="not number_check"`
-- If multiple topics match, the **most specific/complex** match wins.
 
-**Security & Code Execution**  
-- `allow_code_execution` is **`False` by default**.  
-- When **disabled** (default):
-  - Define your schema in a **`json`** code block using a standard **JSON Schema**.
-  - Write your templates in **Jinja2**, which is safe for rendering and does not execute arbitrary Python code.
-- When **enabled** (`allow_code_execution=True`):
-  - You may define the schema in a **Python** code block (e.g., a **Pydantic BaseModel**).
-  - Templates can use **Mako**, which supports embedded Python code and advanced logic.
-- ⚠️ Because Mako and Python blocks can execute arbitrary code, enable this **only in trusted environments**.
+* You can define **multiple topics**.
+* The `match` attribute supports **logical expressions**: `and`, `or`, `not`.
+
+  * Examples:
+
+    * `match="greeting and not goodbye"`
+    * `match="question or email_format"`
+    * `match="not number_check"`
+* If multiple topics match, the **most specific/complex** match wins.
+
+**Security & Code Execution**
+
+* `allow_code_execution` is **`False` by default**.
+* When **disabled** (default):
+
+  * Define your schema in a **`json`** code block using a standard **JSON Schema**.
+  * Write your templates in **Jinja2**, which is safe for rendering and does not execute arbitrary Python code.
+* When **enabled** (`allow_code_execution=True`):
+
+  * You may define the schema in a **Python** code block (e.g., a **Pydantic BaseModel**).
+  * Templates can use **Mako**, which supports embedded Python code and advanced logic.
+* ⚠️ Because Mako and Python blocks can execute arbitrary code, enable this **only in trusted environments**.
 
 ### Example 4 – Tools
 
-````markdown
+```markdown
 ---
 title: Hello World Tool Bot
 subtitle: Minimal Conversational AI demonstrating a date/time tool
@@ -292,30 +301,32 @@ def get_current_datetime() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 ~~~
 
-````
+```
 
-This example demonstrates how to use a simple Python tool inside a BotMark bot to return the current date and time.  
+This example demonstrates how to use a simple Python tool inside a BotMark bot to return the current date and time.
 The `get_current_datetime` function uses Python’s `datetime` module to generate a timestamp in the format `YYYY-MM-DD HH:MM:SS`.
 
 **Key points:**
-- The tool is defined in a Python code block with the `.tool` attribute.
-- **`allow_code_execution` must be set to `True`** when creating the `BotManager` in Python, otherwise the tool will not run.
-- Code execution is disabled by default for security reasons, as it allows arbitrary Python code to be executed from the bot definition.
-- Only enable this in a trusted environment where you control the bot files.
+
+* The tool is defined in a Python code block with the `.tool` attribute.
+* **`allow_code_execution` must be set to `True`** when creating the `BotManager` in Python, otherwise the tool will not run.
+* Code execution is disabled by default for security reasons, as it allows arbitrary Python code to be executed from the bot definition.
+* Only enable this in a trusted environment where you control the bot files.
 
 When the bot receives a message like *"What’s the date and time?"*, it will call the `get_current_datetime` tool and return the current timestamp.
 
 ### Example 5 – Graphs (advanced)
 
-BotMark supports defining **multi-agent workflows** using **Mermaid state diagrams** in a `#graph` code block.  
-The *main agent* runs first, then passes its output through the agents defined in the graph.  
+BotMark supports defining **multi-agent workflows** using **Mermaid state diagrams** in a `#graph` code block.
+The *main agent* runs first, then passes its output through the agents defined in the graph.
 Each agent can modify, review, or add to the result before returning control to the main agent for a final output.
 
 In this Hello World example:
-- The **main agent** writes a short email.
-- The **review agent** forces **emojis at the start and end** of the email.
-- (In practice, the review agent can enforce **any user-dependent logic**: tone, length, formatting, etc.)
-- The main agent incorporates feedback and outputs the improved email.
+
+* The **main agent** writes a short email.
+* The **review agent** forces **emojis at the start and end** of the email.
+* (In practice, the review agent can enforce **any user-dependent logic**: tone, length, formatting, etc.)
+* The main agent incorporates feedback and outputs the improved email.
 
 ````markdown
 ---
@@ -358,6 +369,7 @@ Add at least one emoji at the **start** and one at the **end** of the email text
 ````
 
 **How it works**
+
 1. User sends a request → main agent writes an initial email.
 2. Graph routes the draft to the `review_agent`.
 3. `review_agent` returns concise feedback (e.g., “Add an emoji at the start and one at the end”).
@@ -368,50 +380,53 @@ Add at least one emoji at the **start** and one at the **end** of the email text
 
 ### Suggestion Prompt (ready to paste)
 
-~~~markdown
+```markdown
 Write a e-mail to a friend
-~~~
-
+```
 
 ## 🐍 Using `BotManager` in Python
 
 `BotManager` has two main purposes:
 
-1) **Create a standalone Agent from a BotMark definition**  
-   Use `get_agent(...)` to obtain a **Pydantic-based AI agent** that is configured by a BotMark file/string.  
+1. **Create a standalone Agent from a BotMark definition**
+   Use `get_agent(...)` to obtain a **Pydantic-based AI agent** that is configured by a BotMark file/string.
    You can then use this agent independently of any model lookup or source.
 
    **Signature**
+
    ```python
    def get_agent(self, bot_definition: Union[str, dict]):
        ...
    ```
 
    **Example**
-   ```python
+
+   ````python
    from botmark import BotManager
 
    botmark_md = "```markdown {#response}\nHello World!\n```"
    mgr = BotManager()
    agent = mgr.get_agent(botmark_md)   # returns a configured, standalone agent
    # agent.run(...), agent.handle(...), etc. (depending on your Agent API)
-   ```
+   ````
 
-2) **Manage multiple bots via sources, `default_model`, and system-prompt fallback**  
-   `BotManager` can resolve models from one or more **Botmark sources** (e.g., built-in `FileSystemSource`, custom sources like a Langfuse-backed loader).  
-   If no source resolves a model, it can use a **`default_model`** or (if enabled) the **system message** as a fallback.
+2. **Manage multiple bots via sources and `default_model`**
+   `BotManager` can resolve models from one or more **Botmark sources** (e.g., built-in `FileSystemSource`, custom sources like a Langfuse-backed loader).
+   If no source resolves a model, it can use a **`default_model`**; otherwise, an error is raised.
 
-   - `get_models()` returns a JSON object **analogous to OpenAI’s `/models`** endpoint, containing models aggregated from all configured sources.
-   - `respond()` creates an answer from an **OpenAI-compatible request payload** (messages, model, etc.).  
-     - `respond()` is **async**  
-     - `respond_sync()` is the **synchronous** counterpart
+   * `get_models()` returns a JSON object **analogous to OpenAI’s `/models`** endpoint, containing models aggregated from all configured sources.
+   * `respond()` creates an answer from an **OpenAI-compatible request payload** (messages, model, etc.).
+
+     * `respond()` is **async**
+     * `respond_sync()` is the **synchronous** counterpart
 
    **Example**
+
    ```python
    from botmark import BotManager, FileSystemSource
 
    src = FileSystemSource(bot_dir="bots/")
-   mgr = BotManager(botmark_source=src, allow_system_prompt_fallback=True)
+   mgr = BotManager(botmark_source=src)
 
    # List models (OpenAI-like shape)
    models = mgr.get_models()
@@ -432,19 +447,10 @@ Write a e-mail to a friend
    # result = asyncio.run(mgr.respond(msg))
    ```
 
-**Resolution order (summary)**  
-1. If `model` is provided: try sources in order → if none found, use `default_model` → if not set and `allow_system_prompt_fallback=True`, use system message → otherwise error.  
-2. If `model` is missing: use `default_model` → else (if enabled) use system message → otherwise error.
+**Resolution order (summary)**
 
-
-BotMark now loads definitions via **sources** — any class that implements:
-- `list_models() -> {"object": "list", "data": [...]}`  
-- `load_botmark(model_id: str) -> str | None` (raw BotMark markdown)
-
-The built-in source is:
-- `FileSystemSource(bot_dir="...")` — loads `.md` BotMark files from disk.
-
-You can also define **custom sources** (e.g., Langfuse, databases, APIs).
+1. If `model` is provided: try sources in order → if none found, use `default_model` → otherwise error.
+2. If `model` is missing: use `default_model` → otherwise error.
 
 ---
 
@@ -467,7 +473,7 @@ print(bot.respond(msg))
 
 ### 2) Using a **default model** (string or `StringIO`)
 
-```python
+````python
 from botmark import BotManager
 import io
 
@@ -476,34 +482,14 @@ bot = BotManager(default_model=botmark_md)
 
 msg = {"messages": [{ "role": "user", "content": "Hello" }]}
 print(bot.respond(msg))
-```
+````
 
 ---
 
-### 3) From a **system prompt only**
+### 3) Using a **custom source** — Langfuse example
 
-> 🛡️ Requires: `allow_system_prompt_fallback=True`
-
-```python
-from botmark import BotManager
-
-bot = BotManager(allow_system_prompt_fallback=True)
-
-msg = {
-  "messages": [
-    { "role": "system", "content": "```markdown {#response}\nHello World!\n```" },
-    { "role": "user", "content": "Hello" }
-  ]
-}
-print(bot.respond(msg))
-```
-
----
-
-### 4) Using a **custom source** — Langfuse example
-
-> This example shows how to implement your own `BotmarkSource` to pull definitions from Langfuse.  
-> Requires `pip install langfuse` and Langfuse credentials in ENV:  
+> This example shows how to implement your own `BotmarkSource` to pull definitions from Langfuse.
+> Requires `pip install langfuse` and Langfuse credentials in ENV:
 > `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`.
 
 ```python
@@ -604,8 +590,7 @@ print(bot.respond(msg))
 
 ---
 
-
-### 5) Combining multiple sources
+### 4) Combining multiple sources
 
 ```python
 from botmark import BotManager, FileSystemSource
@@ -632,54 +617,18 @@ flowchart TD
     B --|found|--> C[Return BotMark]
     B --|not found|--> D{Next source}
     D --|found|--> C
-    D --|not found|--> F[Check default_model / system_prompt_fallback]
+    D --|not found|--> F[Check default_model]
+    F --|found|--> G[Use default_model]
+    F --|not found|--> H[Error]
 ```
 
 > **Order matters**: The first source that returns a BotMark string wins.
 
 ---
 
-### 6) Behavior with `default_model` and `allow_system_prompt_fallback`
-
-When `BotManager` tries to resolve a model, the behavior depends on these settings:
-
-```mermaid
-flowchart TD
-    Start[Incoming request] --> HasModel{model provided?}
-    HasModel --|yes|--> TrySources[Lookup in sources]
-    HasModel --|no|--> HasDefault{default_model set?}
-
-    HasDefault --|yes|--> UseDefault[Use default_model]
-    HasDefault --|no|--> AllowFallback{allow_system_prompt_fallback?}
-    AllowFallback --|yes|--> UseSystem[Use system prompt content]
-    AllowFallback --|no|--> Err[Error: model not found]
-
-    TrySources --|found|--> UseSource[Use source result]
-    TrySources --|not found|--> FallbackDefault{default_model set?}
-    FallbackDefault --|yes|--> UseDefault
-    FallbackDefault --|no|--> FallbackAllow{allow_system_prompt_fallback?}
-    FallbackAllow --|yes|--> UseSystem
-    FallbackAllow --|no|--> Err
-
-```
-
-**Key points:**
-- If `default_model` is set, it’s used whenever no model is found or no model is provided.
-- If `allow_system_prompt_fallback=True`, BotManager will use the **system message content** as the BotMark definition when no model is resolved.
-- If neither is set, unresolved models result in an error.
-
----
-
 ## ⚠️ Security Note
 
-System-prompt fallback is **disabled by default**.
-To allow fallback to an inline system prompt, use:
-
-```python
-BotManager(allow_system_prompt_fallback=True)
-```
-
-Additionally, the parameter `allow_code_execution` is **`False` by default**.
+The parameter `allow_code_execution` is **`False` by default**.
 When enabled:
 
 * The bot schema can be defined via a Python code block (using a **Pydantic BaseModel**).
@@ -715,11 +664,9 @@ pandoc botname.md --toc -o complete_bot.docx
 
 > This approach enforces **consistency** and reduces duplication across code and documentation.
 
-
 ## Examples
 
 [System Fault Reporter](examples/documentation/system_fault_reporter.md?raw=1)
-
 
 ## ✅ Summary
 
@@ -736,6 +683,3 @@ BotMark is ideal for teams who want:
 ## 🔓 License
 
 MIT – use freely, modify openly, contribute happily.
-
-
-
