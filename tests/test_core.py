@@ -5,19 +5,17 @@ import time
 import pytest
 import time
 from pathlib import Path
-from botmark import BotManager
-
-from botmark import FileSystemSource
+import botmark
 
 # Optional path override via environment variable
 BOTMARK_DIR = Path(Path(__file__).parent / "unittests").resolve()
 
-botmark_source = FileSystemSource( BOTMARK_DIR )
+botmark_source = botmark.FileSystemSource( BOTMARK_DIR )
 
 def collect_all_tests():
     print(f"[DEBUG] Using test directory: {BOTMARK_DIR}")
     tests = []
-    bot = BotManager( allow_code_execution = True, botmark_source = botmark_source )
+    bot = botmark.BotManager( allow_code_execution = True, botmark_source = botmark_source )
 
     for entry in bot.get_tests():
         model_id = entry.get("model", "(unnamed)")
@@ -28,10 +26,28 @@ def collect_all_tests():
     print(f"[DEBUG] Collected test cases: {len(tests)}")
     return tests
 
+def test_imports_local_botmark():
+    """
+    Ensure that 'import botmark' resolves to the local project folder,
+    not to a globally installed site-packages version.
+    """
+    mod_path = Path(botmark.__file__).resolve()
+    repo_root = Path(__file__).resolve().parents[1]
+    expected_dir = repo_root / "botmark"
+
+    print(f"[DEBUG] botmark imported from: {mod_path}")
+
+    # must be inside ./botmark (flat layout)
+    assert str(mod_path).startswith(str(expected_dir)), (
+        f"'botmark' was not imported from the repo.\n"
+        f"Found:   {mod_path}\n"
+        f"Expected under: {expected_dir}\n"
+    )
+
 @pytest.mark.parametrize("label,model_id,test_name,qa_list", collect_all_tests())
 def test_qa_block(label, model_id, test_name, qa_list):
 
-    bot = BotManager( allow_code_execution = True, botmark_source = botmark_source)
+    bot = botmark.BotManager( allow_code_execution = True, botmark_source = botmark_source)
     agent = bot._get_agent_from_model_name(model_id)
 
     message_history = []
@@ -75,7 +91,7 @@ def _out(x):
 
 def test_agent_consistency_across_interfaces():
     print(f"[DEBUG] Starting consistency check in: {BOTMARK_DIR}")
-    bot = BotManager( allow_system_prompt_fallback=True, allow_code_execution = True, botmark_source = botmark_source)
+    bot = botmark.BotManager( allow_system_prompt_fallback=True, allow_code_execution = True, botmark_source = botmark_source)
 
     md_files = [f for f in BOTMARK_DIR.rglob("*.md") if f.is_file()]
     relative_md_files = [f.relative_to(BOTMARK_DIR) for f in md_files]
