@@ -285,10 +285,10 @@ You can greet the user and provide the current date and time.
 # Tool: Get Current Date and Time
 
 ~~~python {#get_datetime .tool}
-from datetime import datetime
-
 def get_current_datetime() -> str:
     '''Return the current date and time as a string.'''
+
+    from datetime import datetime
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 ~~~
 
@@ -684,3 +684,4 @@ BotMark is ideal for teams who want:
 ## 🔓 License
 
 MIT – use freely, modify openly, contribute happily.
+
