@@ -355,7 +355,7 @@ class FileSystemSource(BotmarkSource):
 
 class BotManager:
 
-    def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None,  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_system_prompt_fallback: bool = False, allow_code_execution: bool = False, botmark_source = None ):
+    def __init__(self, default_model: Optional[Union[str, dict, TextIO]] = None,  adapt_payload = lambda x: x, response_parser = lambda x: x.output, allow_code_execution: bool = False, botmark_source = None ):
 
         if botmark_source is None:
             botmark_source = [FileSystemSource(".")]
@@ -365,7 +365,6 @@ class BotManager:
 
         self.adapt_payload = adapt_payload
         self.response_parser = response_parser
-        self.allow_system_prompt_fallback = allow_system_prompt_fallback
         self.allow_code_execution = allow_code_execution
         self.botmark_source = botmark_source
 
@@ -470,12 +469,6 @@ class BotManager:
         else:
             if self.agent:
                 response = engine.respond( self.agent, json_payload )
-            elif self.allow_system_prompt_fallback:
-                system_prompt = ""
-                for message in json_payload.get("messages", []):
-                    if message.get("role") == "system":
-                        system_prompt += message.get("content", "")
-                response = engine.respond( self.get_agent( system_prompt ), json_payload )
             else:
                 raise ValueError( f"Model '{model_name}' not found, no fallback agent available, and system prompt fallback is disabled." )
 
@@ -502,13 +495,6 @@ class BotManager:
         else:
             if self.agent:
                 response = await _call_engine_async(self.agent, json_payload)
-            elif self.allow_system_prompt_fallback:
-                system_prompt = "".join(
-                    m.get("content", "")
-                    for m in json_payload.get("messages", [])
-                    if m.get("role") == "system"
-                )
-                response = await _call_engine_async(self.get_agent(system_prompt), json_payload)
             else:
                 raise ValueError(
                     f"Model '{model_name}' not found, no fallback agent available, "

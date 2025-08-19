@@ -193,7 +193,7 @@ def test_agent_consistency_across_interfaces_all_sources(source_kind):
             else _make_source(source_kind, model_id=rel_id if source_kind == "string-single" else None)
         )
         bot = botmark.BotManager(
-            allow_system_prompt_fallback=True,
+            #allow_system_prompt_fallback=True,
             allow_code_execution=True,
             botmark_source=src,
         )
@@ -267,49 +267,3 @@ def test_agent_consistency_across_interfaces_all_sources(source_kind):
             f"[{file_id}] ({source_kind}) Mismatch async model vs async string: "
             f"{output_by_string_async} - {output_by_model_async}"
         )
-
-        # Finally test the payload-based interface parity
-        payloads = [
-            {"model": file_id, "messages": [{"role": "user", "content": "test"}]},
-            {"messages": [
-                {"role": "system", "content": content},
-                {"role": "user", "content": "test"}
-            ]},
-            {"model": "unknown", "messages": [
-                {"role": "system", "content": content},
-                {"role": "user", "content": "test"}
-            ]},
-        ]
-
-        for idx, payload in enumerate(payloads):
-            # --- Sync respond ---
-            try:
-                start_respond = time.time()
-                output_by_respond_sync = _out(bot.respond_sync(payload))
-                respond_time = time.time() - start_respond
-                print(f"[DEBUG] bot.respond_sync() time [Payload #{idx}]: {respond_time:.3f} seconds")
-                print(f"[DEBUG] Output from bot.respond_sync() [Payload #{idx}]: {output_by_respond_sync}")
-            except Exception as e:
-                pytest.fail(f"[{file_id}] ({source_kind}) bot.respond_sync() failed on payload #{idx}: {e}")
-
-            assert output_by_respond_sync == output_by_model_sync, (
-                f"[{file_id}] ({source_kind}) Mismatch in bot.respond_sync() output [Payload #{idx}]:\n"
-                f"Expected: {output_by_model_sync}\nGot:      {output_by_respond_sync}"
-            )
-
-            # --- Async respond ---
-            try:
-                start_respond_async = time.time()
-                output_by_respond_async = _out(asyncio.run(bot.respond(payload)))
-                respond_time_async = time.time() - start_respond_async
-                print(f"[DEBUG] bot.respond() time [Payload #{idx}]: {respond_time_async:.3f} seconds")
-                print(f"[DEBUG] Output from bot.respond() [Payload #{idx}]: {output_by_respond_async}")
-            except Exception as e:
-                pytest.fail(f"[{file_id}] ({source_kind}) bot.respond() failed on payload #{idx}: {e}")
-
-            assert output_by_respond_async == output_by_respond_sync == output_by_model_sync, (
-                f"[{file_id}] ({source_kind}) Mismatch in async respond output [Payload #{idx}]:\n"
-                f"Expected: {output_by_model_sync}\n"
-                f"bot.respond_sync(): {output_by_respond_sync}\n"
-                f"bot.respond():      {output_by_respond_async}"
-            )
