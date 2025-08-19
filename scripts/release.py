@@ -36,83 +36,81 @@ def list_changes(root: Path):
     return staged, unstaged, untracked
 
 def _extract_version(txt: str):
-    m = re.search(r'version\s*=\s*[\'"]([^\'"]+)[\'"]', txt)
+    m = re.search(r'(?i)version\s*=\s*[\'"]([^\'"]+)[\'"]', txt)
     return (m.group(1).strip() if m else None)
 
-def _normalize_for_compare(txt: str) -> str:
-    """
-    Normalize line endings, strip trailing spaces, collapse multiple blank lines,
-    and replace the version assignment with a stable placeholder, regardless of spaces/quotes.
-    """
-    # unify line endings
-    txt = txt.replace("\r\n", "\n").replace("\r", "\n")
-    # strip trailing spaces per line
-    lines = [ln.rstrip() for ln in txt.split("\n")]
-    # collapse multiple blank lines (optional but makes diffs resilient)
-    out = []
-    blank = False
-    for ln in lines:
-        if ln == "":
-            if not blank:
-                out.append("")
-            blank = True
-        else:
-            out.append(ln)
-            blank = False
-    norm = "\n".join(out)
-    # normalize any version assignment to a placeholder
-    norm = re.sub(r'version\s*=\s*[\'"][^\'"]+[\'"]', 'version="__VERSION__"', norm)
-    return norm
-
 def ensure_only_setup_py_changed(root: Path):
+    """
+    Allow only changes in setup.py, and only a single version-line change.
+    We verify this by parsing the unified diff (U=0) and requiring:
+      - exactly one '-' line matching version=... AND
+      - exactly one '+' line matching version=...
+      - no other +/- lines
+    """
     staged, unstaged, untracked = list_changes(root)
     changed = staged | unstaged | untracked
     if not changed:
         return  # repo clean
 
-    # allow only setup.py changes
-    allowed = {"setup.py"}
-    other = sorted(p for p in changed if p not in allowed)
+    other = sorted(p for p in changed if p != "setup.py")
     if other:
         print("❌ Repo has changes outside setup.py:\n  " + "\n  ".join(other))
         sys.exit(1)
 
-    # If setup.py changed, verify only the version line changed (ignoring whitespace)
-    setup_path = root / "setup.py"
-    current_text = setup_path.read_text(encoding="utf-8", errors="ignore")
-    try:
-        head_text = run_read(["git", "show", "HEAD:setup.py"], cwd=root)
-    except subprocess.CalledProcessError:
-        head_text = ""  # no HEAD — accept as long as version exists
-
-    cur_ver = _extract_version(current_text)
-    if not cur_ver:
-        print("❌ Could not find version=... in current setup.py.")
+    # If setup.py is untracked, we cannot diff it against HEAD; treat as illegal change
+    if "setup.py" in untracked:
+        print("❌ setup.py is untracked; only version changes to a tracked setup.py are allowed.")
         sys.exit(1)
 
-    if head_text:
-        head_ver = _extract_version(head_text)
-        if not head_ver:
-            print("❌ Could not find version=... in HEAD:setup.py (unexpected).")
-            sys.exit(1)
-        if cur_ver == head_ver:
-            print("❌ setup.py changed but version did not change. Only version changes are allowed.")
-            sys.exit(1)
+    try:
+        diff = run_read(["git", "--no-pager", "diff", "-U0", "HEAD", "--", "setup.py"], cwd=root)
+    except subprocess.CalledProcessError:
+        diff = ""
 
-        # compare normalized contents to ignore whitespace-only edits
-        if _normalize_for_compare(current_text) != _normalize_for_compare(head_text):
-            # show a tiny diagnostic diff to help
-            print("❌ setup.py has changes other than the version line (ignoring whitespace).")
-            try:
-                diff = _run(["git", "--no-pager", "diff", "-U0", "HEAD", "--", "setup.py"], cwd=root)
-                print("--- diff ---")
-                print(diff)
-                print("------------")
-            except Exception:
-                pass
-            sys.exit(1)
+    # Collect all changed content lines (ignore file headers and @@ hunk headers)
+    minus_lines, plus_lines, other_lines = [], [], []
+    for line in diff.splitlines():
+        if line.startswith('--- ') or line.startswith('+++ ') or line.startswith('@@'):
+            continue
+        if line.startswith('-'):
+            minus_lines.append(line[1:])
+        elif line.startswith('+'):
+            plus_lines.append(line[1:])
+        else:
+            # context lines shouldn't appear with -U0, but keep for completeness
+            other_lines.append(line)
 
-    print(f"✅ Detected only version change in setup.py (→ {cur_ver}).")
+    # If there are no +/- lines (e.g., staged but identical to HEAD), treat as no-op.
+    if not minus_lines and not plus_lines:
+        # Still ensure the file contains a version entry
+        txt = (root / "setup.py").read_text(encoding="utf-8", errors="ignore")
+        if not _extract_version(txt):
+            print("❌ setup.py present but no version=... entry.")
+            sys.exit(1)
+        print("ℹ️ setup.py shows as changed, but diff to HEAD is empty; proceeding.")
+        return
+
+    # Strict rule: exactly one removed and one added line, both must be version=...
+    vpattern = re.compile(r'(?i)^\s*version\s*=\s*[\'"][^\'"]+[\'"]\s*,?\s*$')
+    if len(minus_lines) != 1 or len(plus_lines) != 1:
+        print("❌ setup.py has multiple changes; only a single version line change is allowed.")
+        print("--- diff ---")
+        print(diff)
+        print("------------")
+        sys.exit(1)
+    if not vpattern.match(minus_lines[0]) or not vpattern.match(plus_lines[0]):
+        print("❌ setup.py change is not limited to the version=... line.")
+        print("--- diff ---")
+        print(diff)
+        print("------------")
+        sys.exit(1)
+
+    # Ensure the version actually changed
+    if minus_lines[0] == plus_lines[0]:
+        print("❌ version line did not change.")
+        sys.exit(1)
+
+    print("✅ Detected only a version-line change in setup.py.")
 
 def ensure_branch_synced(root: Path):
     branch = run_read(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root)
