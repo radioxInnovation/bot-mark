@@ -4,8 +4,8 @@ import sys
 import re
 from pathlib import Path
 
-# Default = TEST. Use --real to actually commit/tag/push.
-REAL_MODE = "--real" in sys.argv
+# Default = REAL. Use --test to only log and skip commits/tags/pushes.
+REAL_MODE = "--test" not in sys.argv
 
 def _run(cmd, check=True, cwd=None):
     return subprocess.run(cmd, check=check, capture_output=True, text=True, cwd=cwd).stdout.strip()
