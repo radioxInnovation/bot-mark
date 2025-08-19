@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
+# Default = REAL. Use --test to only log and skip commits/tags/pushes.
+
 import subprocess
 import sys
 import re
 from pathlib import Path
 
-# Default = REAL. Use --test to only log and skip commits/tags/pushes.
-REAL_MODE = "--test" not in sys.argv
+TEST_MODE = "--test" in sys.argv
+REAL_MODE = not TEST_MODE
 
 def _run(cmd, check=True, cwd=None):
     return subprocess.run(cmd, check=check, capture_output=True, text=True, cwd=cwd).stdout.strip()
 
 def run_read(cmd, cwd=None):
-    if not REAL_MODE:
+    if TEST_MODE:
         print(f"[TEST-READ] {' '.join(cmd)}")
     return _run(cmd, cwd=cwd)
 
 def run_do(cmd, cwd=None):
-    if not REAL_MODE:
+    if TEST_MODE:
         print(f"[TEST] {' '.join(cmd)}")
         return ""
     return _run(cmd, cwd=cwd)
@@ -35,17 +37,21 @@ def list_changes(root: Path):
     untracked = set(p.replace("\\", "/") for p in run_read(["git", "ls-files", "--others", "--exclude-standard"], cwd=root).splitlines() if p.strip())
     return staged, unstaged, untracked
 
-def _extract_version(txt: str):
-    m = re.search(r'(?i)version\s*=\s*[\'"]([^\'"]+)[\'"]', txt)
-    return (m.group(1).strip() if m else None)
+def _extract_version_from_setup(text: str) -> str | None:
+    """
+    Extract version only from the setuptools.setup(...) call:
+      setup(..., version="1.2.3", ...)
+    Ignores any other variables like PAI_VERSION.
+    """
+    m = re.search(r'setup\s*\([^)]*?\bversion\s*=\s*[\'"]([^\'"]+)[\'"]', text, re.IGNORECASE | re.DOTALL)
+    return m.group(1).strip() if m else None
 
 def ensure_only_setup_py_changed(root: Path):
     """
     Allow only changes in setup.py, and only a single version-line change.
-    We verify this by parsing the unified diff (U=0) and requiring:
-      - exactly one '-' line matching version=... AND
-      - exactly one '+' line matching version=...
-      - no other +/- lines
+    Verified by parsing `git diff -U0 HEAD -- setup.py`:
+      - exactly one '-' line and one '+' line, both matching a version=... assignment
+      - nothing else changed.
     """
     staged, unstaged, untracked = list_changes(root)
     changed = staged | unstaged | untracked
@@ -57,7 +63,6 @@ def ensure_only_setup_py_changed(root: Path):
         print("❌ Repo has changes outside setup.py:\n  " + "\n  ".join(other))
         sys.exit(1)
 
-    # If setup.py is untracked, we cannot diff it against HEAD; treat as illegal change
     if "setup.py" in untracked:
         print("❌ setup.py is untracked; only version changes to a tracked setup.py are allowed.")
         sys.exit(1)
@@ -67,45 +72,33 @@ def ensure_only_setup_py_changed(root: Path):
     except subprocess.CalledProcessError:
         diff = ""
 
-    # Collect all changed content lines (ignore file headers and @@ hunk headers)
-    minus_lines, plus_lines, other_lines = [], [], []
+    minus_lines, plus_lines = [], []
     for line in diff.splitlines():
-        if line.startswith('--- ') or line.startswith('+++ ') or line.startswith('@@'):
+        if line.startswith(('--- ', '+++ ', '@@')):
             continue
         if line.startswith('-'):
             minus_lines.append(line[1:])
         elif line.startswith('+'):
             plus_lines.append(line[1:])
-        else:
-            # context lines shouldn't appear with -U0, but keep for completeness
-            other_lines.append(line)
 
-    # If there are no +/- lines (e.g., staged but identical to HEAD), treat as no-op.
+    # If there is no actual diff (e.g. staged identical), accept and proceed.
     if not minus_lines and not plus_lines:
-        # Still ensure the file contains a version entry
         txt = (root / "setup.py").read_text(encoding="utf-8", errors="ignore")
-        if not _extract_version(txt):
-            print("❌ setup.py present but no version=... entry.")
+        if not _extract_version_from_setup(txt):
+            print("❌ setup.py present but no setup(..., version=...) entry.")
             sys.exit(1)
         print("ℹ️ setup.py shows as changed, but diff to HEAD is empty; proceeding.")
         return
 
-    # Strict rule: exactly one removed and one added line, both must be version=...
     vpattern = re.compile(r'(?i)^\s*version\s*=\s*[\'"][^\'"]+[\'"]\s*,?\s*$')
     if len(minus_lines) != 1 or len(plus_lines) != 1:
         print("❌ setup.py has multiple changes; only a single version line change is allowed.")
-        print("--- diff ---")
-        print(diff)
-        print("------------")
+        print("--- diff ---\n" + diff + "\n------------")
         sys.exit(1)
     if not vpattern.match(minus_lines[0]) or not vpattern.match(plus_lines[0]):
         print("❌ setup.py change is not limited to the version=... line.")
-        print("--- diff ---")
-        print(diff)
-        print("------------")
+        print("--- diff ---\n" + diff + "\n------------")
         sys.exit(1)
-
-    # Ensure the version actually changed
     if minus_lines[0] == plus_lines[0]:
         print("❌ version line did not change.")
         sys.exit(1)
@@ -127,11 +120,10 @@ def ensure_branch_synced(root: Path):
 
 def get_version_from_setup_py(root: Path) -> str:
     text = (root / "setup.py").read_text(encoding="utf-8", errors="ignore")
-    m = re.search(r'(?i)version\s*=\s*[\'"]([^\'"]+)[\'"]', text)
-    if not m:
-        print("❌ Could not find a version=... entry in setup.py")
+    version = _extract_version_from_setup(text)
+    if not version:
+        print("❌ Could not find setup(..., version=...) in setup.py")
         sys.exit(1)
-    version = m.group(1).strip()
     if not re.match(r"^[0-9]+\.[0-9]+\.[0-9]+([abrc][0-9]+)?$", version):
         print(f"❌ Version '{version}' does not match expected pattern (e.g. 1.2.3, 1.2.3a1, 1.2.3b2, 1.2.3rc1)")
         sys.exit(1)
@@ -167,7 +159,7 @@ def create_and_push_tag(version: str, root: Path):
     print(f"🎉 Tagged and pushed '{version}'. GitHub Actions will now publish to PyPI.")
 
 if __name__ == "__main__":
-    print("🚦 Mode:", "REAL (will commit/tag/push)" if REAL_MODE else "TEST (default; logs only)")
+    print("🚦 Mode:", "TEST (logs only)" if TEST_MODE else "REAL (will commit/tag/push)")
     root = repo_root()
     ensure_only_setup_py_changed(root)
     ensure_branch_synced(root)
