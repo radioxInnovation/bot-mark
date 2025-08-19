@@ -1,6 +1,7 @@
 import setuptools
 
-PAI_VERSION = "0.4.8"
+# Minimum required version of pydantic-ai-slim
+PAI_MIN_V = "0.4.8"
 
 # All extras supported by pydantic-ai-slim
 pai_extras = [
@@ -33,13 +34,13 @@ extras = {
     "mako": ["Mako>=1.3.10"],
     "templates": ["Jinja2>=3.1.6", "Mako>=1.3.10"],
     "dotenv": ["python-dotenv>=1.1.1"],
-    "pydantic_ai": [f"pydantic-ai[all]>={PAI_VERSION}"],
+    "pydantic_ai": [f"pydantic-ai[all]>={PAI_MIN_V}"],
     "pydantic": ["pydantic"],
 }
 
 # forward all slim extras
 for extra in pai_extras:
-    extras[extra] = [f"pydantic-ai-slim[{extra}]>={PAI_VERSION}"]
+    extras[extra] = [f"pydantic-ai-slim[{extra}]>={PAI_MIN_V}"]
 
 # "all" combines everything
 extras["all"] = [
@@ -48,7 +49,7 @@ extras["all"] = [
     "python-dotenv>=1.1.1",
     "requests>=2.32.4",
     "pydantic",
-] + [f"pydantic-ai-slim[{extra}]>={PAI_VERSION}" for extra in pai_extras]
+] + [f"pydantic-ai-slim[{extra}]>={PAI_MIN_V}" for extra in pai_extras]
 
 setuptools.setup(
     name="botmark",
@@ -72,7 +73,7 @@ setuptools.setup(
     ],
     python_requires=">=3.11",
     install_requires=[
-        f"pydantic-ai-slim>={PAI_VERSION}",
+        f"pydantic-ai-slim>={PAI_MIN_V}",
     ],
     extras_require=extras,
 )
