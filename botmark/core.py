@@ -1,7 +1,7 @@
 import json, os, unittest, re, time
 import asyncio
 from pathlib import Path
-from typing import Any, Optional, Union, TextIO, Dict
+from typing import Any, Optional, Union, TextIO, Dict, Mapping
 from pydantic import BaseModel
 
 from pydantic_ai.models.test import TestModel
@@ -263,6 +263,43 @@ class BotmarkSource:
 
     def load_botmark(self, model_id):
         pass
+
+class StringSource(BotmarkSource):
+    """
+    Minimal in-memory source:
+    - pass a single (model_id, markdown) OR a dict mapping ids -> markdown strings
+    - list_models() returns the same envelope as FileSystemSource
+    - load_botmark(model_id) returns the stored markdown or None
+    """
+    def __init__(self,
+                 model_id: Optional[str] = None,
+                 text: Optional[str] = None,
+                 models: Optional[Mapping[str, str]] = None) -> None:
+        super().__init__()
+
+        if models is not None and (model_id is not None or text is not None):
+            raise ValueError("Provide EITHER `models` OR (`model_id` and `text`).")
+
+        if models is not None:
+            self._models: Dict[str, str] = dict(models)
+        else:
+            if not model_id or text is None:
+                raise ValueError("Provide `model_id` and `text` for single-model usage.")
+            self._models = {model_id: text}
+
+        # give everything a created timestamp now
+        now = int(time.time())
+        self._created: Dict[str, int] = {mid: now for mid in self._models.keys()}
+
+    def list_models(self) -> Dict[str, Any]:
+        defaults = {"object": "model", "owned_by": "StringSource"}
+        data = []
+        for mid in self._models.keys():
+            data.append(defaults | {"id": mid, "created": self._created.get(mid, int(time.time()))})
+        return {"object": "list", "data": data}
+
+    def load_botmark(self, model_id: str) -> Optional[str]:
+        return self._models.get(model_id)
 
 class FileSystemSource(BotmarkSource):
     def __init__(self, bot_dir="."):
