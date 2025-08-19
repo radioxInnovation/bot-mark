@@ -508,24 +508,66 @@ print(bot.respond(msg))
 
 ```python
 import time
-from typing import Dict, Any
-from langfuse import get_client
-from botmark import BotManager, BotmarkSource
+from typing import Dict, Any, List, Optional
+from langfuse import Langfuse, get_client
+from botmark import BotmarkSource
+
+langfuse = Langfuse(
+    secret_key="sk-lf-3a38281a-dab5-4c13-a75c-063677d4944f",
+    public_key="pk-lf-6be19b4c-32b2-4e10-bbb4-120257875f1b",
+    host="https://langfuse.radiox-innovation.de"
+)
 
 class LangfuseSource(BotmarkSource):
-    def __init__(self):
+    def __init__(
+        self,
+        version_label: str = "production",   # "production" or "latest"
+        id_prefix: str = "",              # keep consistent
+        id_suffix: str = "",
+        allow_fallback_to_latest: bool = False
+    ):
         super().__init__()
         self.client = get_client()
+        self.version_label = version_label.strip().lower()
+        self.id_prefix = id_prefix
+        self.id_suffix = id_suffix
+        self.allow_fallback_to_latest = allow_fallback_to_latest
 
+    # ---------- helpers ----------
+    def _encode_id(self, name: str) -> str:
+        return f"{self.id_prefix}{name}{self.id_suffix}"
+
+    def _decode_id(self, model_id: str) -> str:
+        """Strip prefix/suffix safely; return the raw Langfuse prompt name."""
+        raw = model_id
+        if self.id_prefix and raw.startswith(self.id_prefix):
+            raw = raw[len(self.id_prefix):]
+        if self.id_suffix and raw.endswith(self.id_suffix):
+            raw = raw[: -len(self.id_suffix)]
+        return raw
+
+    def _has_label(self, name: str, label: str) -> bool:
+        try:
+            _ = self.client.get_prompt(name, label=label)
+            return True
+        except Exception:
+            return False
+
+    # ---------- public API ----------
     def list_models(self) -> Dict[str, Any]:
-        models = []
+        models: List[Dict[str, Any]] = []
         try:
             prompts = self.client.api.prompts.list().data
+            seen = set()
             now = int(time.time())
             for p in prompts:
                 name = getattr(p, "name", None) or getattr(p, "id", None)
-                if name:
-                    models.append({"id": name, "created": now})
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                # Only include prompts that actually have the requested label
+                if self._has_label(name, self.version_label):
+                    models.append({"id": self._encode_id(name), "created": now})
         except Exception as e:
             print(f"⚠️ Could not list Langfuse prompts: {e}")
 
@@ -533,11 +575,20 @@ class LangfuseSource(BotmarkSource):
         return {"object": "list", "data": [defaults | m for m in models]}
 
     def load_botmark(self, model_id: str):
+        """Load the configured label; optional fallback to latest."""
+        raw_name = self._decode_id(model_id)
         try:
-            prompt = self.client.get_prompt(model_id)
+            prompt = self.client.get_prompt(raw_name, label=self.version_label)
             return getattr(prompt, "prompt", None)
-        except Exception as e:
-            print(f"⚠️ Error loading Langfuse prompt '{model_id}': {e}")
+        except Exception as e_primary:
+            if self.allow_fallback_to_latest and self.version_label != "latest":
+                try:
+                    prompt = self.client.get_prompt(raw_name, label="latest")
+                    print(f"ℹ️ Fallback: loaded 'latest' for '{raw_name}'.")
+                    return getattr(prompt, "prompt", None)
+                except Exception as e_fallback:
+                    print(f"⚠️ Fallback to latest failed for '{raw_name}': {e_fallback}")
+            print(f"⚠️ Error loading {self.version_label} prompt '{raw_name}': {e_primary}")
             return None
 
 # Example usage
@@ -685,5 +736,6 @@ BotMark is ideal for teams who want:
 ## 🔓 License
 
 MIT – use freely, modify openly, contribute happily.
+
 
 
