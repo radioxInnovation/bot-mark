@@ -30,17 +30,45 @@ def repo_root() -> Path:
         sys.exit(1)
 
 def list_changes(root: Path):
-    """Return three sets: staged, unstaged, untracked file paths (posix-style)."""
     staged = set(p.replace("\\", "/") for p in run_read(["git", "diff", "--name-only", "--cached"], cwd=root).splitlines() if p.strip())
     unstaged = set(p.replace("\\", "/") for p in run_read(["git", "diff", "--name-only"], cwd=root).splitlines() if p.strip())
     untracked = set(p.replace("\\", "/") for p in run_read(["git", "ls-files", "--others", "--exclude-standard"], cwd=root).splitlines() if p.strip())
     return staged, unstaged, untracked
 
+def _extract_version(txt: str):
+    m = re.search(r'version\s*=\s*[\'"]([^\'"]+)[\'"]', txt)
+    return (m.group(1).strip() if m else None)
+
+def _normalize_for_compare(txt: str) -> str:
+    """
+    Normalize line endings, strip trailing spaces, collapse multiple blank lines,
+    and replace the version assignment with a stable placeholder, regardless of spaces/quotes.
+    """
+    # unify line endings
+    txt = txt.replace("\r\n", "\n").replace("\r", "\n")
+    # strip trailing spaces per line
+    lines = [ln.rstrip() for ln in txt.split("\n")]
+    # collapse multiple blank lines (optional but makes diffs resilient)
+    out = []
+    blank = False
+    for ln in lines:
+        if ln == "":
+            if not blank:
+                out.append("")
+            blank = True
+        else:
+            out.append(ln)
+            blank = False
+    norm = "\n".join(out)
+    # normalize any version assignment to a placeholder
+    norm = re.sub(r'version\s*=\s*[\'"][^\'"]+[\'"]', 'version="__VERSION__"', norm)
+    return norm
+
 def ensure_only_setup_py_changed(root: Path):
     staged, unstaged, untracked = list_changes(root)
     changed = staged | unstaged | untracked
     if not changed:
-        return  # repo clean, also fine
+        return  # repo clean
 
     # allow only setup.py changes
     allowed = {"setup.py"}
@@ -49,38 +77,39 @@ def ensure_only_setup_py_changed(root: Path):
         print("❌ Repo has changes outside setup.py:\n  " + "\n  ".join(other))
         sys.exit(1)
 
-    # If setup.py changed, verify only the version line differs vs HEAD
+    # If setup.py changed, verify only the version line changed (ignoring whitespace)
     setup_path = root / "setup.py"
     current_text = setup_path.read_text(encoding="utf-8", errors="ignore")
     try:
         head_text = run_read(["git", "show", "HEAD:setup.py"], cwd=root)
     except subprocess.CalledProcessError:
-        head_text = ""  # no HEAD (new repo/file) — skip strict diff
+        head_text = ""  # no HEAD — accept as long as version exists
 
-    def extract_version(txt: str):
-        m = re.search(r'version\s*=\s*[\'"]([^\'"]+)[\'"]', txt)
-        return (m.group(1).strip() if m else None)
-
-    def normalize(txt: str) -> str:
-        # Replace only the version value and normalize line endings
-        txt = txt.replace("\r\n", "\n")
-        return re.sub(r'version\s*=\s*[\'"][^\'"]+[\'"]', 'version="__VERSION__"', txt)
-
-    cur_ver = extract_version(current_text)
+    cur_ver = _extract_version(current_text)
     if not cur_ver:
         print("❌ Could not find version=... in current setup.py.")
         sys.exit(1)
 
     if head_text:
-        head_ver = extract_version(head_text)
+        head_ver = _extract_version(head_text)
         if not head_ver:
             print("❌ Could not find version=... in HEAD:setup.py (unexpected).")
             sys.exit(1)
         if cur_ver == head_ver:
             print("❌ setup.py changed but version did not change. Only version changes are allowed.")
             sys.exit(1)
-        if normalize(current_text) != normalize(head_text):
-            print("❌ setup.py has changes other than the version line. Please revert them.")
+
+        # compare normalized contents to ignore whitespace-only edits
+        if _normalize_for_compare(current_text) != _normalize_for_compare(head_text):
+            # show a tiny diagnostic diff to help
+            print("❌ setup.py has changes other than the version line (ignoring whitespace).")
+            try:
+                diff = _run(["git", "--no-pager", "diff", "-U0", "HEAD", "--", "setup.py"], cwd=root)
+                print("--- diff ---")
+                print(diff)
+                print("------------")
+            except Exception:
+                pass
             sys.exit(1)
 
     print(f"✅ Detected only version change in setup.py (→ {cur_ver}).")
@@ -100,7 +129,7 @@ def ensure_branch_synced(root: Path):
 
 def get_version_from_setup_py(root: Path) -> str:
     text = (root / "setup.py").read_text(encoding="utf-8", errors="ignore")
-    m = re.search(r'version\s*=\s*[\'"]([^\'"]+)[\'"]', text)
+    m = re.search(r'(?i)version\s*=\s*[\'"]([^\'"]+)[\'"]', text)
     if not m:
         print("❌ Could not find a version=... entry in setup.py")
         sys.exit(1)
