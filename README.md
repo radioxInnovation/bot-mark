@@ -14,14 +14,129 @@ This **single source of truth** makes bots easier to maintain, version-control, 
 * **Executable** → run directly via Python’s `botmark` package
 * **Extensible** → add custom tools, topics, and agent graphs
 
-| Feature                  | Description                                             |
-| ------------------------ | ------------------------------------------------------- |
-| ✅ Markdown-based         | Bot definitions live in a structured Markdown format.   |
-| ✅ LLM-agnostic           | Works with any LLM (e.g. OpenAI, Claude, local models). |
-| ✅ Executable in Python   | Easily run bots using the `botmark` Python package.     |
-| ✅ Single source of truth | One file defines bot behavior, schema, and user docs.   |
-| ✅ Multi-bot support      | Load multiple bots via folder-based setup.              |
-| ✅ Easy export            | Generate Word, HTML, or PDF docs using Pandoc.          |
+To really see the difference, let’s compare building a small FAQ bot **with** and **without** BotMark.  
+
+### ❌ Without BotMark  
+
+```python
+# Hardcoded system prompt
+system_prompt = """
+You are a helpful FAQ assistant.
+If the user asks about the product, answer briefly and clearly.
+If unsure, say "I don’t know."
+"""
+
+# Custom schema validation
+from pydantic import BaseModel
+class UserInput(BaseModel):
+    message: str
+    question: str | None = None
+
+# Custom routing logic
+def classify(message: str) -> str:
+    if any(w in message.lower() for w in ["price","product","support"]):
+        return "faq"
+    if any(w in message.lower() for w in ["hi","hello","thanks"]):
+        return "smalltalk"
+    return "other"
+
+# Response formatting in Python
+def respond(user_input: UserInput):
+    category = classify(user_input.message)
+    if category == "faq":
+        return f"FAQ Answer: {user_input.question}"
+    elif category == "smalltalk":
+        return f"👋 Nice to hear from you! {user_input.message}"
+    else:
+        return "I don’t know."
+```
+
+**Issues:**  
+- Prompt is buried in Python code  
+- Schema, routing, and responses live in different places  
+- Documentation must be maintained separately → risk of drift  
+
+---
+
+### ✅ With BotMark  
+
+```markdown
+---
+title: FAQ Bot
+model: gpt-5
+---
+
+# This bot answers FAQs about a product.
+# Everything is defined in one Markdown file:
+# - Prompt
+# - Schema
+# - Response template
+# - Topics for routing
+
+~~~markdown {#system}
+You are a helpful FAQ assistant.
+If the user asks about the product, answer briefly and clearly.
+If the user makes smalltalk, reply in a friendly tone.
+If unsure, say "I don’t know."
+~~~
+
+| topic    | description                        | prompt_regex |
+|----------|------------------------------------|--------------|
+| faq      | Detects questions with keywords    | product|price|support |
+| smalltalk| Friendly greetings and casual talk | hi|hello|thanks     |
+
+~~~jinja2 {#response match="faq"}
+FAQ Answer: {{ RESPONSE["question"] }}
+~~~
+
+~~~jinja2 {#response match="smalltalk"}
+👋 Nice to hear from you! {{ RESPONSE["message"] }}
+~~~
+
+~~~json {#schema}
+{
+  "type": "object",
+  "properties": {
+    "message": { "type": "string" },
+    "question": { "type": "string" }
+  },
+  "required": ["message"]
+}
+~~~
+```
+
+---
+
+### Side by Side  
+
+| Without BotMark | With BotMark |
+|-----------------|--------------|
+| System prompt hardcoded in Python | Prompt in `{#system}` block in Markdown |
+| Schema in separate Pydantic class | Schema inline in `{#schema}` |
+| Response formatting in Python f-strings | Response in `{#response}` Jinja2 |
+| Routing logic in custom `if/else` code | Routing via `topics` table |
+| Docs in README, code in repo → drift | Docs = Bot definition, always in sync |
+
+👉 With BotMark, everything is in **one file** – version-controlled, executable, and directly exportable as documentation.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ---
 
@@ -434,7 +549,7 @@ Write a e-mail to a friend
 
    # Sync respond
    msg = {
-     "model": "hello_world",  # resolved via sources; falls back if missing
+     "model": "hello_world",  # resolved via sources
      "messages": [
        {"role": "user", "content": "Hi there"}
      ]
@@ -499,9 +614,9 @@ from langfuse import Langfuse, get_client
 from botmark import BotmarkSource
 
 langfuse = Langfuse(
-    secret_key="sk-lf-3a38281a-dab5-4c13-a75c-063677d4944f",
-    public_key="pk-lf-6be19b4c-32b2-4e10-bbb4-120257875f1b",
-    host="https://langfuse.radiox-innovation.de"
+    secret_key="sk-...",
+    public_key="pk-...",
+    host="https://..."
 )
 
 class LangfuseSource(BotmarkSource):
