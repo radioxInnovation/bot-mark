@@ -15,13 +15,16 @@ To test the bot in action, make sure to set
 
 ## Info
 
-:::: info
 
-This document describes a simple test setup for a conversational AI "Weather Tool Bot."  
+| topic        | description                 | prompt_prefix | prompt_suffix |  prompt_regex    |
+| ------------ | --------------------------- | ------------- | ------------- | ---------------- |
+| help_command | "help" echos the help block |               |               | (?i)^\s*help\s*$ |
+
+~~~markdown {#response match="help_command"}
+This bot a simple test setup for a conversational AI "Weather Tool Bot."  
 The bot responds to user queries about weather information, including the current temperature, conditions, and forecast.  
 It uses a set of tools (Python functions) to return static values for demonstration purposes.
-
-::::
+~~~
 
 ## System Prompt
 
@@ -45,12 +48,4 @@ def temperature_fahrenheit(city: str) -> float:
 def weather_conditions(city: str) -> str:
     """Return a description of the current weather conditions for the given city."""
     return "Sunny with clear skies"
-~~~
-
-## Get Forecast
-
-~~~python {#get_forecast .tool}
-def weather_forecast(city: str, days: int = 3) -> list[str]:
-    """Return a simple forecast for the next given number of days."""
-    return ["Sunny", "Partly Cloudy", "Light Rain"]
 ~~~
