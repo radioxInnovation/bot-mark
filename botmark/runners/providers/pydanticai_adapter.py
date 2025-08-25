@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 import importlib, inspect
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
-from pydantic_core import to_jsonable_python
+from pydantic_ai import StructuredDict
 
 from .. import RunResponse, ProviderAdapter
 from ...utils.helpers import get_toolset
@@ -51,7 +51,7 @@ class PydanticAIAdapter(ProviderAdapter):
         if history_models:
             run_kwargs["message_history"] = history_models
         if "output_type" in kwargs:
-            run_kwargs["output_type"] = kwargs["output_type"]
+            run_kwargs["output_type"] = StructuredDict( kwargs["output_type"] ) if isinstance(kwargs["output_type"], dict) else kwargs["output_type"]
 
         res = await agent.run(input_text, **run_kwargs)
         oa_messages = pydantic_ai_to_openai(res.all_messages())

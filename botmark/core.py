@@ -26,7 +26,7 @@ load_dotenv(dotenv_path=os.path.join(script_dir, '.env'))
 
 class BotMarkAgent():
 
-    def __init__(self, botmark_json: dict, runner = create_ai_runner ("openai-agents", { }) ):
+    def __init__(self, botmark_json: dict, runner = create_ai_runner ("pydantic-ai", { }) ):
         self.botmark_json = botmark_json
         self.runner = runner
 

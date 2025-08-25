@@ -6,7 +6,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Type, Mapping, 
 
 # pydantic / pydantic-ai
 from pydantic import BaseModel, Field, create_model
-from pydantic_ai import Agent, StructuredDict#, DocumentUrl
+#from pydantic_ai import Agent#, StructuredDict#, DocumentUrl
 #from pydantic_ai.models.test import TestModel
 #from pydantic_ai.messages import ModelMessage
 
@@ -25,11 +25,11 @@ from .yaml_parser import yaml
 import importlib.util
 import concurrent.futures
 
-import pydantic
-import pydantic_ai
+#import pydantic
+#import pydantic_ai
 from pydantic_ai.tools import Tool
-from pydantic_ai import ImageUrl, BinaryContent
-from pydantic_ai.models.test import TestModel
+#from pydantic_ai import ImageUrl, BinaryContent
+#from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset, CombinedToolset
 
 from botmark.utils.logging import log_info
@@ -243,8 +243,9 @@ def get_schema( blocks, TOPICS ):
 
     if schema:
         if schema_block.get("language") == "json":
-            structured = StructuredDict(schema_block.get("content")) 
-            return structured
+            return schema_block.get("content")
+            #structured = StructuredDict(schema_block.get("content")) 
+            #return structured
         elif schema_block.get("language") == "python":
             new_classes = get_base_models(f"""
 from typing import List
@@ -811,9 +812,9 @@ def parse_markdown_to_qa_pairs(md_text: str):
 # ---------------------------
 
 from pydantic import BaseModel, Field, create_model
-from pydantic_ai import Agent
-from pydantic_ai.models.test import TestModel
-from pydantic_ai.messages import ModelMessage
+#from pydantic_ai import Agent
+#from pydantic_ai.models.test import TestModel
+#from pydantic_ai.messages import ModelMessage
 
 class NextOption(NamedTuple):
     node_id: str
@@ -857,7 +858,7 @@ def make_edge_choice_model(allowed_nodes: List[str]) -> Type[BaseModel]:
 
 async def traverse_graph(
     graph_obj: Dict[str, Any],
-    processors: Dict[str, Agent],
+    processors: Dict[str, Any],
     *,
     initial_history: Optional[List[Any]] = None,
     start_message: str = "Hello, let's start the conversation.",
