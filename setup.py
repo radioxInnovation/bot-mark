@@ -74,6 +74,7 @@ setuptools.setup(
     python_requires=">=3.11",
     install_requires=[
         f"pydantic-ai-slim>={PAI_MIN_V}",
+        "openai-agents",
     ],
     extras_require=extras,
 )
