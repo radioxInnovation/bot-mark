@@ -54,3 +54,9 @@ register_provider("pydanticai", _pydanticai_factory)
 # Optional Aliase:
 register_provider("pydantic-ai", _pydanticai_factory)
 register_provider("pydantic_ai", _pydanticai_factory)
+
+
+from .providers.openai_agents_adapter import factory as _oa_agents_factory
+register_provider("openai-agents", _oa_agents_factory)
+register_provider("openai_agents", _oa_agents_factory)
+register_provider("agents", _oa_agents_factory)
