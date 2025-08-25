@@ -11,7 +11,7 @@ from .sources import FileSystemSource, BotmarkSource, StringSource
 
 from .runners import create_ai_runner
 
-from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, get_tools, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_llm_model, render_block, render_named_block, try_answer, make_answer
+from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, get_tools, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
 
 try:
@@ -26,7 +26,7 @@ load_dotenv(dotenv_path=os.path.join(script_dir, '.env'))
 
 class BotMarkAgent():
 
-    def __init__(self, botmark_json: dict, runner = create_ai_runner ("pydanticai", { "model": "openai:gpt-5" }) ):
+    def __init__(self, botmark_json: dict, runner = create_ai_runner ("pydanticai", { }) ):
         self.botmark_json = botmark_json
         self.runner = runner
 
@@ -80,7 +80,6 @@ class BotMarkAgent():
             # robust: str oder list behandeln
             if isinstance(user_input, str):
                 user_text = user_input
-                #non_str_parts = []
             elif isinstance(user_input, list):
                 user_text = "".join([s for s in user_input if isinstance(s, str)])
             else:
@@ -95,11 +94,9 @@ class BotMarkAgent():
             )
 
             active_blocks = get_blocks(self.botmark_json["codeblocks"], ranking_fn)
-
             active_graph = get_graph( self.botmark_json["graphs"], ranking_fn )
-
             active_header = get_header(active_blocks, self.botmark_json["header"])
-            #model = get_llm_model(active_header.get("model"))
+            model = active_header.get("model", None)
 
             answer = None
          
@@ -170,6 +167,8 @@ class BotMarkAgent():
 
                 result = await self.runner(
                     composed_input,
+                    system_prompt= active_system,
+                    model= model,
                     tools=active_tools,
                     images = active_images,
                     query_images = query_images,
