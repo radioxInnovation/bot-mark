@@ -6,12 +6,56 @@ from .. import RunResponse, ProviderAdapter
 # The OpenAI Agents SDK (pip install openai-agents)
 try:
     from agents import Agent as OAAgent, Runner as OARunner
+    from agents import RunConfig
+    from agents.agent_output import AgentOutputSchemaBase
+    from agents.exceptions import ModelBehaviorError
+    from jsonschema import Draft202012Validator
+    import json
+
 except Exception as e:
     raise ImportError(
         "The OpenAI Agents SDK is required for the 'openai-agents' provider. "
         "Install with: pip install openai-agents"
     ) from e
 
+
+
+class JsonSchemaOutput(AgentOutputSchemaBase):
+    """
+    Übergibt dem Agents SDK ein JSON-Schema + Validierung.
+    Das SDK nutzt is_strict_json_schema/json_schema() für Structured Outputs
+    und ruft validate_json(...) auf, um die Modellantwort zu prüfen.
+    """
+
+    def __init__(self, name: str, schema: Dict[str, Any], strict: bool = True):
+        self._name = name
+        self._schema = schema
+        self._strict = strict
+        self._validator = Draft202012Validator(schema)
+
+    # --- geforderte Methoden ---
+    def is_plain_text(self) -> bool:
+        return False  # wir erwarten JSON-Objekte (kein Plain-Text)
+
+    def name(self) -> str:
+        return self._name
+
+    def json_schema(self) -> Dict[str, Any]:
+        return self._schema
+
+    def is_strict_json_schema(self) -> bool:
+        # True: SDK nutzt Strict Structured Outputs (Schema muss den strikten Regeln entsprechen)
+        return self._strict
+
+    def validate_json(self, json_str: str) -> Any:
+        try:
+            obj = json.loads(json_str)
+        except Exception as e:
+            raise ModelBehaviorError(f"Model did not return JSON: {e}")
+        errs = list(self._validator.iter_errors(obj))
+        if errs:
+            raise ModelBehaviorError(f"JSON did not match schema: {errs[0].message}")
+        return obj  # validiertes dict
 
 class OpenAIAgentsAdapter(ProviderAdapter):
     def __init__(self, config: Dict[str, Any]):
@@ -66,8 +110,12 @@ class OpenAIAgentsAdapter(ProviderAdapter):
                     f"{agent_kwargs.get('instructions','')}\n{hint}".strip()
                 )
 
-        agent = OAAgent(**agent_kwargs)
+        output_type = kwargs.get( "output_type", None )
+        if output_type:
+            agent_kwargs["output_type"] = JsonSchemaOutput("Schema", output_type, strict=True)
 
+        agent = OAAgent(**agent_kwargs)
+        
         # ---- Prepare input ---------------------------------------------------
         mh = message_history or []
         if not isinstance(mh, list):
