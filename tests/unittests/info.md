@@ -6,14 +6,14 @@ options:
     allow_code_execution: True 
 ---
 
-:::: info
+~~~markdown {#info }
 some info
-::::
+~~~
 
 ~~~markdown {#version_test .unittest }
 
 # any question...
-> <p>some info</p>
+> some info
 
 ~~~
 
@@ -21,5 +21,5 @@ Response
 ========         
 
 ~~~mako {#response}
-${INFO}
+${BLOCKS["info"].get("content")}
 ~~~

@@ -1,67 +1,100 @@
-from typing import Tuple, Dict, Any, List
 import asyncio
-from pydantic_ai.messages import (
-    ModelRequest, ModelResponse, TextPart, UserPromptPart, ImageUrl
-)
+from typing import Any, Dict, List, Tuple, Union
 
-def _prepare_messages_and_user_input(conversation_data: Dict[str, Any]) -> Tuple[List[Any], Any]:
+def extract_prompt_and_history(
+    data: Union[Dict[str, Any], List[Dict[str, Any]]],
+    *,
+    include_system: bool = True,
+    include_tool_messages: bool = False,
+) -> Tuple[str, List[Dict[str, str]]]:
     """
-    Convert a dictionary of conversation data into:
-      - messages: a list of ModelRequest/ModelResponse for history
-      - user_input: the latest user input, either a str or a mixed list [str, ImageUrl, ...]
+    Accepts either:
+      - a dict with key "messages": [...], or
+      - directly a list of messages.
+    Returns (prompt, history) where:
+      - prompt  = text of the LAST user message
+      - history = all prior messages as [{'role','content'}], optionally filtered.
+
+    Args:
+        data: dict or list. If dict, uses data['messages']; if list, assumes it's the messages list.
+        include_system: include system/developer messages in history.
+        include_tool_messages: include tool/function messages in history.
+
+    Raises:
+        ValueError if messages are missing/invalid or no user message exists.
     """
 
-    def add_user_prompt_to_message_history(messages: list, user_prompt: str, image_url: str | None = None):
-        if user_prompt:
-            parts = [UserPromptPart(content=user_prompt)]
-            if image_url:
-                parts.append(ImageUrl(url=image_url))
-            messages.append(ModelRequest(parts=parts))
+    # --- resolve messages source ---
+    if isinstance(data, dict):
+        if "messages" not in data or not isinstance(data["messages"], list):
+            raise ValueError('Expected dict with key "messages" (list).')
+        messages: List[Dict[str, Any]] = data["messages"]
+    elif isinstance(data, list):
+        messages = data  # assume it's already the messages list
+    else:
+        raise ValueError("Expected a dict with 'messages' or a list of messages.")
 
-    def add_assistant_response_to_message_history(messages: list, assistant_response: str, image_url: str | None = None):
-        if assistant_response:
-            parts = [TextPart(content=assistant_response)]
-            if image_url:
-                parts.append(ImageUrl(url=image_url))
-            messages.append(ModelResponse(parts=parts))
+    def flatten_content(content: Any) -> str:
+        """Convert string or list-of-parts (OpenAI content) to plain text."""
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for p in content:
+                if isinstance(p, dict):
+                    # typical shapes: {"type":"text","text":"..."} or {"text":"..."} or {"content":"..."}
+                    if p.get("type") == "text" and "text" in p:
+                        parts.append(str(p["text"]))
+                    elif "text" in p:
+                        parts.append(str(p["text"]))
+                    elif "content" in p:
+                        parts.append(str(p["content"]))
+                elif isinstance(p, str):
+                    parts.append(p)
+            return "\n".join(parts).strip()
+        return str(content)
 
-    messages: List[Any] = []   # history for model context
-    user_prompt: List[Any] = []  # latest user input
+    # --- find last user message (the prompt) ---
+    last_user_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            last_user_idx = i
+            break
+    if last_user_idx is None:
+        raise ValueError("No user message found.")
 
-    all_messages = conversation_data.get("messages", [])
+    prompt = flatten_content(messages[last_user_idx].get("content", ""))
 
-    for i, entry in enumerate(all_messages):
-        role = entry.get("role")
-        content = entry.get("content")
-        image_url = entry.get("image_url")
+    # --- build history up to (excluding) last user message ---
+    allowed_roles = {"user", "assistant"}
+    if include_system:
+        allowed_roles |= {"system", "developer"}
+    if include_tool_messages:
+        allowed_roles |= {"tool", "function"}
 
-        if role == "user":
-            is_last = i == len(all_messages) - 1
-            if is_last and isinstance(content, str):
-                # Latest user input; keep as a list to allow ImageUrl
-                user_prompt = [content]
-                if image_url:
-                    user_prompt.append(ImageUrl(url=image_url))
-            else:
-                add_user_prompt_to_message_history(messages, content, image_url)
+    history: List[Dict[str, str]] = []
+    for m in messages[:last_user_idx]:
+        role = m.get("role")
+        if role in allowed_roles:
+            text = flatten_content(m.get("content", ""))
+            # Optionally drop empty system/dev messages
+            if text or role not in {"system", "developer"}:
+                history.append({"role": role, "content": text})
 
-        elif role == "assistant":
-            add_assistant_response_to_message_history(messages, content, image_url)
-
-    # If the latest user input has only a single string, pass it as a plain str
-    if len(user_prompt) == 1 and isinstance(user_prompt[0], str):
-        return messages, user_prompt[0]
-    return messages, user_prompt
+    return prompt, history
 
 
 async def respond_async(agent, payload: Dict[str, Any]) -> Any:
-    messages, user_input = _prepare_messages_and_user_input(payload)
+    user_input, messages = extract_prompt_and_history( payload )
     result = await agent.run(user_input, message_history=messages)
     return result
 
 
 def respond(agent, payload: Dict[str, Any]) -> Any:
-    messages, user_input = _prepare_messages_and_user_input(payload)
+    user_input, messages = extract_prompt_and_history( payload )
+
     try:
         return asyncio.run(agent.run(user_input, message_history=messages))
     except RuntimeError as e:
@@ -80,61 +113,3 @@ def respond(agent, payload: Dict[str, Any]) -> Any:
             else:
                 return loop.run_until_complete(agent.run(user_input, message_history=messages))
         raise
-
-# from typing import Tuple, Dict, Any
-# from pydantic_ai.messages import ( ModelRequest, ModelResponse, TextPart, UserPromptPart, ImageUrl )
-
-# def respond_to_json_pyload( agent, payload: dict ) -> str:
-
-#     def process_conversation(conversation_data: Dict[str, Any]) -> Tuple[list, list]:
-#         """
-#         Converts a dictionary of conversation data into lists for further processing.
-#         Returns the formatted messages and the latest user input.
-#         """
-
-#         # Helper function to add a user prompt to the message history
-#         def add_user_prompt_to_message_history(messages: list, user_prompt: str, image_url: str = None ):
-
-#             if user_prompt:
-#                 parts = [(UserPromptPart(content=user_prompt))]
-#                 if image_url:
-#                     parts.append(ImageUrl(url=image_url))
-#                 messages.append(ModelRequest(parts=parts))
-
-#         # Helper function to add the assistant's response to the message history
-#         def add_assistant_response_to_message_history(messages: list, assistant_response: str, image_url: str = None):
-#             if assistant_response:
-#                 parts = [TextPart(content=assistant_response)]
-#                 if image_url:
-#                     parts.append(ImageUrl(url=image_url))
-#                 messages.append(ModelResponse(parts=parts))
-
-#         messages = []       # List of past chat messages for model context
-#         user_prompt = []    # Latest user input (last entry in conversation)
-
-#         all_messages = conversation_data.get("messages", [])
-
-#         for i, entry in enumerate(all_messages):
-#             role = entry.get("role")
-#             content = entry.get("content")
-#             image_url = entry.get("image_url")
-
-#             if role == "user":
-#                 if i == len(all_messages) - 1 and isinstance(content, str):
-#                     user_prompt =  [ content ]
-#                     if image_url:
-#                         user_prompt.append( ImageUrl(url=image_url))
-#                 else:
-#                     add_user_prompt_to_message_history(messages, content, image_url)
-
-#             elif role == "assistant":
-#                 add_assistant_response_to_message_history(messages, content, image_url)
-
-#         return messages, user_prompt
-    
-#     # Process the conversation into history and current user input
-#     messages, user_input = process_conversation( payload )
-
-#     # Run the agent synchronously with the user input and conversation history
-#     result = agent.run_sync( user_input, message_history = messages )
-#     return result

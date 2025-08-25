@@ -1,8 +1,5 @@
 ---
 title: Graph Usage
-requirements: mako
-options:
-    allow_code_execution: True
 ---
 
 # Main Agent
@@ -10,7 +7,7 @@ options:
 ## Response
 
 ~~~mako {#response}
-${QUERY}->main\
+${QUERY}->main
 ~~~
 
 ## Graph
@@ -30,7 +27,7 @@ title: agent_1
 ---
 
 ```mako {#response}
-${QUERY}->agent_1\
+${QUERY}->agent_1
 ```
 ~~~
 
@@ -43,7 +40,7 @@ title: agent_2
 ---
 
 ```mako {#response}
-${QUERY}->agent_2\
+${QUERY}->agent_2
 ```
 
 ~~~

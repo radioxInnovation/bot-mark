@@ -182,7 +182,8 @@ def get_images(images, predicate ):
     valid_images = []
     for image in images:
         if predicate ( image ):
-            valid_images.append( resolve_image_url( image ) )
+            #valid_images.append( resolve_image_url( image ) )
+            valid_images.append( image )
     return valid_images
 
 def decode_data_url(data_url: str) -> tuple[str, bytes]:
@@ -203,32 +204,33 @@ def process_links(links, predicate):
 
             if "mcp" in link.get("class", []):
                 from pydantic_ai.mcp import MCPServerSSE
-                mcp_servers.append( MCPServerSSE(url=href)  )
+                mcp_servers.append( href ) #MCPServerSSE(url=href)  )
             else:
+                valid_links.append( href )
 
-                # 1. Data-URL
-                if href.startswith("data:"):
-                    try:
-                        mime_type, link_bytes = decode_data_url(href)
-                        valid_links.append(BinaryContent(data=link_bytes, media_type=mime_type))
-                    except Exception as e:
-                        print(f"Error decoding data URL: {e}")
+                # # 1. Data-URL
+                # if href.startswith("data:"):
+                #     try:
+                #         mime_type, link_bytes = decode_data_url(href)
+                #         valid_links.append(BinaryContent(data=link_bytes, media_type=mime_type))
+                #     except Exception as e:
+                #         print(f"Error decoding data URL: {e}")
 
-                # 2. Lokale Datei
-                elif os.path.isfile(href):
-                    try:
-                        mime_type, _ = mimetypes.guess_type(href)
-                        link_bytes = open(href, "rb").read()
-                        valid_links.append(BinaryContent(data=link_bytes, media_type=mime_type or "application/octet-stream"))
-                    except Exception as e:
-                        print(f"Error processing the local file: {e}")
+                # # 2. Lokale Datei
+                # elif os.path.isfile(href):
+                #     try:
+                #         mime_type, _ = mimetypes.guess_type(href)
+                #         link_bytes = open(href, "rb").read()
+                #         valid_links.append(BinaryContent(data=link_bytes, media_type=mime_type or "application/octet-stream"))
+                #     except Exception as e:
+                #         print(f"Error processing the local file: {e}")
 
-                # 3. HTTP/HTTPS-URL
-                elif href.startswith("http://") or href.startswith("https://"):
-                    try:
-                        valid_links.append( DocumentUrl ( url=href) )
-                    except Exception as e:
-                        print(f"Error fetching URL: {e}")
+                # # 3. HTTP/HTTPS-URL
+                # elif href.startswith("http://") or href.startswith("https://"):
+                #     try:
+                #         valid_links.append( DocumentUrl ( url=href) )
+                #     except Exception as e:
+                #         print(f"Error fetching URL: {e}")
 
     return valid_links, mcp_servers
 
@@ -435,34 +437,39 @@ def render_block(block, data=None, venv_base_dir="/data/venvs"):
     # normalize context
     context = data if isinstance(data, dict) else {"data": data}
 
+    if "nostrip" in block.get("classes", []):
+        strip_func = lambda x: x
+    else:
+        strip_func = lambda x: x.strip()
+
     try:
         if lang == "mako" and isinstance(data, dict):
             if len(packages) > 0:
-                return render_template_in_venv(content, data, packages=packages, venv_base_dir=venv_base_dir)
+                return strip_func( render_template_in_venv(content, data, packages=packages, venv_base_dir=venv_base_dir))
             else:
                 try:
                     from mako.template import Template as MakoTemplate
                 except ImportError:
                     return "⚠️  'mako' is not installed; install with 'pip install Mako' or the extra 'botmark[mako]'."
-                return MakoTemplate(content).render(**data)
+                return strip_func( MakoTemplate(content).render(**data))
 
         elif lang == "jinja2" and isinstance(data, dict):
             try:
                 from jinja2 import Template as JinjaTemplate
             except ImportError:
                 return "⚠️  'Jinja2' is not installed; install with 'pip install Jinja2' or the extra 'botmark[jinja2]'."
-            return JinjaTemplate(content).render(**data)
+            return strip_func( JinjaTemplate(content).render(**data))
 
         elif lang == "fstring":
             # Allow `{...}` expressions without requiring a leading f in user input
             try:
-                return render_fstring(content, context)
+                return strip_func( render_fstring(content, context))
             except Exception as e:
                 return f"⚠️ fstring render error: {e}"
 
         elif lang in ("format", "str.format"):
             try:
-                return render_format(content, context)
+                return strip_func( render_format(content, context))
             except KeyError as e:
                 return f"⚠️ format placeholder not found in context: {e}"
             except Exception as e:
@@ -474,51 +481,48 @@ def render_block(block, data=None, venv_base_dir="/data/venvs"):
     # Fallback: return raw content unchanged
     return content
 
-def render_named_block(name, blocks, system, header, version, info, query, topics, venv_base_dir, data={} ):
+def render_named_block(name, blocks, system, header, version, query, topics, venv_base_dir, data={} ):
     template_data = {
         "BLOCKS": {key: obj.to_json() for key, obj in blocks.items() if obj is not None},
         "TOPICS": topics,
         "SYSTEM": system,
         "HEADER": header,
         "VERSION": version,
-        "INFO": info,
         "QUERY": query
     }
     block = get_block(name, blocks)
     return render_block(block, template_data | data, venv_base_dir) if block is not None else ""
 
-### get tools
-def get_toolset( blocks ):
+def get_tools( blocks ):
 
-    # Funktion zum Parsen und Registrieren der Tools
-    def create_toolset_from_code(code_list, shared_context={}, max_retries = 1):
-        tools = []
-        for code in code_list:
-            # Vorbereitung eines lokalen Namensraums
-            local_namespace = {}
-            # Sichere Ausführung der Funktion
-            exec(textwrap.dedent(code), shared_context, local_namespace)
-            # Alle Funktionsobjekte extrahieren
-            for name, obj in local_namespace.items():
-                if callable(obj):
-                    tools.append(
-                        Tool(
-                            obj,
-                            name=name,
-                            description=obj.__doc__ or "No description."
-                        )
-                    )
-        return FunctionToolset( tools = tools, max_retries = max_retries )
-    
-    shared_context = {
-        "pydantic": pydantic,
-        "pydantic_ai": pydantic_ai
-    }
-
-    tool_sets = []
+    tools = []
     for _, block in blocks.items():
         if block.get("language") == "python" and "tool" in block.get("classes"):
-            tool_sets.append( create_toolset_from_code ( [ block.get("content")], shared_context=shared_context, max_retries=1 ) )
+            tools.append( {"code": block.get("content"), "attributes": block.get("attributes")} )
+    return tools
+
+### get tools
+def get_toolset( tools ):
+
+    # Funktion zum Parsen und Registrieren der Tools
+    def create_toolset_from_code(code, shared_context={}, attributes= {}, max_retries = 1):
+        tools = []
+        local_namespace = {}
+        exec(textwrap.dedent(code), shared_context, local_namespace)
+        for name, obj in local_namespace.items():
+            if callable(obj):
+                tools.append(
+                    Tool(
+                        obj,
+                        name=name,
+                        description=obj.__doc__ or "No description."
+                    )
+                )
+        return FunctionToolset( tools = tools, max_retries = max_retries )
+
+    tool_sets = []
+    for t in tools:
+        tool_sets.append( create_toolset_from_code ( **t) )
 
     return [ CombinedToolset ( tool_sets ) ]
 
@@ -711,15 +715,15 @@ def get_blocks(blocks, ranking_function: callable = lambda x: 0 ):
         valid_blocks[key] = CodeBlock( **block.data | {"content": content } )
     return valid_blocks
 
-def try_answer(blocks, system, header, version, info, query, venv_base_dir, topics ):
+def try_answer(blocks, system, header, version, query, venv_base_dir, topics ):
     if "response" in blocks and not "RESPONSE" in blocks["response"].get("content", ""):
-        return render_named_block("response", blocks, system, header, version, info, query, topics, venv_base_dir)
+        return render_named_block("response", blocks, system, header, version, query, topics, venv_base_dir)
     return None
 
 def dumps( data ):
     return json.dumps( data, indent = 4, ensure_ascii=False)
 
-def make_answer( blocks, system, header, version, info, query, text, venv_base_dir, topics = {} ):
+def make_answer( blocks, system, header, version, query, text, venv_base_dir, topics = {} ):
     json_response = { "RESPONSE": text }
     response_text = text
     if "schema" in blocks:
@@ -733,7 +737,7 @@ def make_answer( blocks, system, header, version, info, query, text, venv_base_d
 
     if "response" in blocks:
         try:
-            response_text = render_named_block( "response", blocks, system, header, version, info, query, topics, venv_base_dir, json_response )    
+            response_text = render_named_block( "response", blocks, system, header, version, query, topics, venv_base_dir, json_response )    
         except Exception as e:
             response_text = str(e)
     return response_text
@@ -902,19 +906,19 @@ async def traverse_graph(
     graph_obj: Dict[str, Any],
     processors: Dict[str, Agent],
     *,
-    initial_history: Optional[List[ModelMessage]] = None,
+    initial_history: Optional[List[Any]] = None,
     start_message: str = "Hello, let's start the conversation.",
-    selection_model: Optional[Any] = None,   # router uses ONLY this model (fallback to TestModel)
-) -> Tuple[Dict[str, List[ModelMessage]], List[str], str]:
+    runner: Optional[Any] = None,
+) -> Tuple[Dict[str, List[Any]], List[str], str]:
     """
     Async traversal:
     - each agent receives the previous agent's answer as input
     - one pre-history (initial_history) is copied to EVERY agent's history
-    - internal router uses ONLY selection_model and sees the current node's history
+    - internal router uses ONLY runner and sees the current node's history
     Returns: (histories per agent, transcript of node names, final answer)
     """
     # Seed per-agent histories with the SAME initial history (copied per agent)
-    histories: Dict[str, List[ModelMessage]] = {
+    histories: Dict[str, List[Any]] = {
         node: (list(initial_history) if initial_history else [])
         for node in processors
     }
@@ -941,7 +945,7 @@ async def traverse_graph(
         current_node_id: str,
         options: List[NextOption],
         path_prefix: List[str],
-        hists: Dict[str, List[ModelMessage]],
+        hists: Dict[str, List[Any]],
     ) -> Optional[NextOption]:
         
         if not options:
@@ -956,16 +960,12 @@ async def traverse_graph(
 
         def _options_to_dict(opts: List[NextOption]):
             return [{"node_id": o.node_id, "label": o.label} for o in opts]
-
-        router_agent = Agent(
-            model=(selection_model or TestModel()),
-            system_prompt=(
-                "You are a router agent. Choose exactly ONE of the allowed options based on the given goals. "
-                "Respond strictly as JSON that is valid for the Pydantic schema EdgeChoiceDynamic. "
-                "If multiple options are reasonable, prefer the one that provides new information "
-                "or continues the current path. NEVER choose a node_id that is not in the provided options."
-            ),
-        )
+        
+        system_prompt= """
+You are a router agent. Choose exactly ONE of the allowed options based on the given goals.
+Respond strictly as JSON that is valid for the Pydantic schema EdgeChoiceDynamic.
+If multiple options are reasonable, prefer the one that provides new information
+or continues the current path. NEVER choose a node_id that is not in the provided options."""
 
         prompt = {
             "current_node": current_node_id,
@@ -978,12 +978,8 @@ async def traverse_graph(
         }
 
         try:
-            res = await router_agent.run(
-                json.dumps(prompt),
-                output_type=EdgeChoiceDynamic,                 # validated structured output
-                message_history=hists.get(current_node_id, []),# includes initial_history
-            )
-            chosen_id = res.output.node_id.value  # Enum -> string
+            res = await runner( json.dumps(prompt), system_prompt= system_prompt, output_type=EdgeChoiceDynamic, message_history=hists.get(current_node_id, []) )
+            chosen_id = res.output["node_id"]["value"]
         except Exception as e:
             print("Router exception, falling back to first option:", e)
             chosen_id = allowed_ids[0]
@@ -1005,9 +1001,11 @@ async def traverse_graph(
                 last_output,
                 message_history=histories[current],  # starts with initial_history
             )
-            histories[current] += result.new_messages()
-            last_output = result.output            # <- keep updating; becomes final answer
-            transcript.append(current)             # record the node/agent name
+            #histories[current] += result.new_messages()
+            histories[current] = result.all_messages
+
+            last_output = result.output             # <- keep updating; becomes final answer
+            transcript.append(current)              # record the node/agent name
 
         # 2) Determine next-step options
         options = next_options_for_prefix(path_so_far)
@@ -1030,4 +1028,3 @@ async def traverse_graph(
 
     answer = last_output
     return histories, transcript, answer
-

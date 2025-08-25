@@ -1,21 +1,17 @@
-import json, os, unittest, re, time
+import json, os
 import asyncio
-from pathlib import Path
-from typing import Any, Optional, Union, TextIO, Dict, Mapping
+from typing import Any, Optional, Union, TextIO, Dict
 from pydantic import BaseModel
-
-from pydantic_ai.models.test import TestModel
+import inspect
 import copy
-from pydantic_ai import Agent, StructuredDict
-from pydantic_ai.messages import (
-    ModelRequest,
-    SystemPromptPart,
-)
 
 from .markdown_parser import parser
 from .responder import engine
+from .sources import FileSystemSource, BotmarkSource, StringSource
 
-from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_llm_model, get_toolset, render_block, render_named_block, try_answer, make_answer
+from .runners import create_ai_runner
+
+from .utils.helpers import traverse_graph, parse_markdown_to_qa_pairs, get_graph, interpret_bool_expression, get_tools, find_active_topics, get_blocks, get_header, get_images, process_links, get_schema, get_llm_model, render_block, render_named_block, try_answer, make_answer
 from . import __version__ as VERSION
 
 try:
@@ -28,15 +24,11 @@ except ImportError:
 script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(dotenv_path=os.path.join(script_dir, '.env'))
 
-class BotMarkAgent(Agent[Any, Any]):
+class BotMarkAgent():
 
-    def __init__(self, *args, botmark_json: dict, **kwargs):
-
+    def __init__(self, botmark_json: dict, runner = create_ai_runner ("pydanticai", { "model": "openai:gpt-5" }) ):
         self.botmark_json = botmark_json
-        self._init_args = args
-        self._init_kwargs = kwargs
-        self.lf = self._init_logfire_instance()
-        super().__init__(*args, **kwargs)
+        self.runner = runner
 
     def __eq__(self, other):
         if isinstance(other, BotMarkAgent):
@@ -51,26 +43,21 @@ class BotMarkAgent(Agent[Any, Any]):
         if not include_graphs:
             botmark_json["graphs"] = []
 
-        return BotMarkAgent(*self._init_args,
-                            botmark_json=botmark_json,
-                            **copy.deepcopy(self._init_kwargs))
+        return BotMarkAgent( botmark_json=botmark_json, runner = self.runner )
     
-    def get_info( self ):
-        return self.botmark_json.get("info", "<p>info not found</p>")
-    
-    def _init_logfire_instance(self):
-        try:
-            logging = (self.botmark_json or {}).get("header", {}).get("logging", {})
-            if "logfire" in logging:
-                import logfire  # only import if needed
+    # def _init_logfire_instance(self):
+    #     try:
+    #         logging = (self.botmark_json or {}).get("header", {}).get("logging", {})
+    #         if "logfire" in logging:
+    #             import logfire  # only import if needed
 
-                lf = logfire.configure(**logging.get("logfire", {}))
-                lf.instrument_pydantic_ai()
-                return lf
-        except ImportError:
-            print("⚠️  logfire is not installed; logging is disabled.")
-        except Exception as e:
-            print(str(e))
+    #             lf = logfire.configure(**logging.get("logfire", {}))
+    #             lf.instrument_pydantic_ai()
+    #             return lf
+    #     except ImportError:
+    #         print("⚠️  logfire is not installed; logging is disabled.")
+    #     except Exception as e:
+    #         print(str(e))
 
     def get_tests(self):
         test_cases = []
@@ -93,13 +80,11 @@ class BotMarkAgent(Agent[Any, Any]):
             # robust: str oder list behandeln
             if isinstance(user_input, str):
                 user_text = user_input
-                non_str_parts = []
+                #non_str_parts = []
             elif isinstance(user_input, list):
                 user_text = "".join([s for s in user_input if isinstance(s, str)])
-                non_str_parts = [x for x in user_input if not isinstance(x, str)]
             else:
                 user_text = str(user_input)
-                non_str_parts = []
 
             topics = {}
             if topics_table:
@@ -114,7 +99,7 @@ class BotMarkAgent(Agent[Any, Any]):
             active_graph = get_graph( self.botmark_json["graphs"], ranking_fn )
 
             active_header = get_header(active_blocks, self.botmark_json["header"])
-            model = get_llm_model(active_header.get("model"))
+            #model = get_llm_model(active_header.get("model"))
 
             answer = None
          
@@ -123,7 +108,7 @@ class BotMarkAgent(Agent[Any, Any]):
                     return "agent" in value.get("classes", [])
                 
                 active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
-                processors: Dict[str, Agent] = { "[*]": self.clone( include_graphs=False ) }
+                processors: Dict[str, BotMarkAgent] = { "[*]": self.clone( include_graphs=False ) }
 
                 try:
                     default_config = json.loads( os.getenv("AGENT_DEFAULT_CONFIG", "{}" ))
@@ -135,14 +120,18 @@ class BotMarkAgent(Agent[Any, Any]):
                         bot_json = default_config | active_agents[node].get("content", {})
 
                         processors[node] = BotMarkAgent( botmark_json= bot_json)
-                    elif not node in processors.keys():
-                        processors[node] = Agent( TestModel(custom_output_text=f"response of agent {node}") )
+                    elif node not in processors:
+                        # fail fast: agent missing
+                        raise ValueError(
+                            f"Graph node '{node}' has no matching agent definition "
+                            f"in active_blocks. Define an agent for this node."
+                        )
 
                 histories, transcript, answer = await traverse_graph(
                     graph_obj=active_graph,
                     processors=processors,
                     initial_history=kwargs.get("message_history", []),
-                    selection_model=model,
+                    runner=self.runner,
                     start_message=user_text
                 )
 
@@ -154,44 +143,39 @@ class BotMarkAgent(Agent[Any, Any]):
                 def filter_funktion(key, value):
                     return "agent" in value.get("classes", [])
 
-                INFO = self.get_info()
-
-                active_agents = {k: v for k, v in active_blocks.items() if filter_funktion(k, v)}
                 active_prompt = active_blocks.get("prompt")
                 final_query = render_block(active_prompt, {"QUERY": user_text}) if active_prompt else user_text                
                 active_system = render_named_block(
-                    "system", active_blocks, active_header, VERSION, INFO, final_query, topics, VENV_BASE_DIR, {}
+                    "system", active_blocks, active_header, VERSION, final_query, topics, VENV_BASE_DIR, {}
                 )
 
-                answer = try_answer(active_blocks, active_system, active_header, VERSION, INFO, final_query, VENV_BASE_DIR, topics)
+                answer = try_answer(active_blocks, active_system, active_header, VERSION, final_query, VENV_BASE_DIR, topics)
 
             if answer is None:
-                active_toolset = get_toolset(active_blocks)
+
+                active_tools = get_tools(active_blocks)
 
                 query_objects = parser.parse_to_json(final_query) if active_header.get("inspect_user_prompt", False) is True else {}
+
                 query_images = get_images(query_objects.get("images", []), lambda x: True)
                 query_links, _ = process_links(query_objects.get("links", []), lambda x: True)
 
                 predicate = lambda block: interpret_bool_expression(block.get("match"), topics) >= 0
 
                 active_images = get_images(self.botmark_json.get("images", []), predicate)
+
                 active_links, mcp_servers = process_links(self.botmark_json.get("links", []), predicate)
 
-                system_parts = [SystemPromptPart(content=active_system)]
-                history = kwargs.get("message_history", [])
-                if not history:
-                    kwargs["message_history"] = [ModelRequest(parts=system_parts)]
-                else:
-                    head = history[0]
-                    head.parts = system_parts + head.parts
-                    kwargs["message_history"] = history
+                composed_input = final_query
 
-                composed_input = [final_query] + non_str_parts + active_images + active_links + query_images + query_links
-
-                result = await super().run(
+                result = await self.runner(
                     composed_input,
-                    model=model,
-                    toolsets=active_toolset,
+                    tools=active_tools,
+                    images = active_images,
+                    query_images = query_images,
+                    links = active_links,
+                    query_links = query_links,
+                    mcp_servers = mcp_servers,
                     output_type=active_schema,
                     **kwargs
                 )
@@ -208,150 +192,63 @@ class BotMarkAgent(Agent[Any, Any]):
                     llm_response = str(out)
 
                 answer = make_answer(
-                    active_blocks, active_system, active_header, VERSION, INFO, final_query, llm_response, VENV_BASE_DIR, topics
+                    active_blocks, active_system, active_header, VERSION, final_query, llm_response, VENV_BASE_DIR, topics
                 )
 
-                result = await super().run(
-                    composed_input,
-                    model=TestModel(custom_output_text=answer),
-                    **kwargs
-                )
-                return result
-
-            result = await super().run(
+            result = await self.runner(
                 user_input,
-                model=TestModel(custom_output_text=answer),
+                custom_output_text=answer,
                 **kwargs
             )
             return result
 
         except Exception as e:
-            return await super().run(
+            return await self.runner(
                 user_input,
-                model=TestModel(custom_output_text=f'ERROR: {str(e)}'),
+                custom_output_text=f'ERROR: {str(e)}',
                 **kwargs
             )
 
     def run_sync(self, *args, **kwargs) -> Any:
+        """
+        Synchronously execute the async `run` method.
+        Works when no event loop is running and, if already inside a loop (e.g. Jupyter),
+        tries nest_asyncio; otherwise tells the caller to await.
+        """
+        target = self.run(*args, **kwargs)
+
+        # In case run was (accidentally) made sync:
+        if not inspect.isawaitable(target):
+            return target
 
         try:
-            return asyncio.run(self.run(*args, **kwargs))
+            return asyncio.run(target)
         except RuntimeError as e:
-            if "running event loop" in str(e):
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    try:
-                        import nest_asyncio  # type: ignore
-                        nest_asyncio.apply()
-                        return loop.run_until_complete(self.run(*args, **kwargs))
-                    except Exception as inner:
-                        raise RuntimeError(
-                            "run_sync wurde innerhalb einer laufenden Event Loop aufgerufen. "
-                            "Bitte stattdessen 'await run(...)' verwenden."
-                        ) from inner
-                else:
-                    return loop.run_until_complete(self.run(*args, **kwargs))
-            raise
+            # Typically: "asyncio.run() cannot be called from a running event loop"
+            if "running event loop" not in str(e):
+                raise
 
-class BotmarkSource:
-
-    def __init__( self ):
-        pass
-
-    def list_models( self ):
-        pass
-
-    def load_botmark(self, model_id):
-        pass
-
-class StringSource(BotmarkSource):
-    """
-    Minimal in-memory source:
-    - pass a single (model_id, markdown) OR a dict mapping ids -> markdown strings
-    - list_models() returns the same envelope as FileSystemSource
-    - load_botmark(model_id) returns the stored markdown or None
-    """
-    def __init__(self,
-                 model_id: Optional[str] = None,
-                 text: Optional[str] = None,
-                 models: Optional[Mapping[str, str]] = None) -> None:
-        super().__init__()
-
-        if models is not None and (model_id is not None or text is not None):
-            raise ValueError("Provide EITHER `models` OR (`model_id` and `text`).")
-
-        if models is not None:
-            self._models: Dict[str, str] = dict(models)
-        else:
-            if not model_id or text is None:
-                raise ValueError("Provide `model_id` and `text` for single-model usage.")
-            self._models = {model_id: text}
-
-        # give everything a created timestamp now
-        now = int(time.time())
-        self._created: Dict[str, int] = {mid: now for mid in self._models.keys()}
-
-    def list_models(self) -> Dict[str, Any]:
-        defaults = {"object": "model", "owned_by": "StringSource"}
-        data = []
-        for mid in self._models.keys():
-            data.append(defaults | {"id": mid, "created": self._created.get(mid, int(time.time()))})
-        return {"object": "list", "data": data}
-
-    def load_botmark(self, model_id: str) -> Optional[str]:
-        return self._models.get(model_id)
-
-class FileSystemSource(BotmarkSource):
-    def __init__(self, bot_dir="."):
-        super().__init__()
-        self.bot_dir = bot_dir
-
-    def list_models(self) -> Dict[str, Any]:
-        """Return all available models in bot_dir."""
-
-        botmark_models = []
-        if self.bot_dir:
-            models_dir = Path(self.bot_dir)
-            if models_dir.exists() and models_dir.is_dir():
-                for f in models_dir.rglob("*.md"):
-                    if f.is_file():
-                        try:
-                            created = int(f.stat().st_mtime)
-                        except Exception:
-                            created = int(time.time())
-
-                        # relative Pfad ohne Endung
-                        relative_path = f.relative_to(models_dir).with_suffix("")  # entfernt die Endung
-                        botmark_models.append( {"id": str(relative_path).replace("\\", "/"), "created": created } )
-
-        defaults = { "object": "model", "owned_by": "FileSystemProvider" }
-        return {
-            "object": "list",
-            "data": [ defaults | m for m in botmark_models ]
-        }
-
-    def load_botmark(self, model_id: str):
-        """
-        Load and return the raw BotMark markdown string for the given model.
-        Only `.md` files are supported.
-        """
-        if not model_id or not self.bot_dir:
-            return None
-
-        models_dir = Path(self.bot_dir)
-        if not models_dir.exists() or not models_dir.is_dir():
-            return None
-
-        model_path = models_dir / (model_id + ".md")
-        if model_path.is_file():
+        # Already inside a running loop
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop after all; create one
+            loop = asyncio.new_event_loop()
             try:
-                with open(model_path, "r", encoding="utf-8") as f:
-                    return f.read()
-            except Exception as e:
-                print(f"⚠️ Error loading {model_path}: {e}")
-                return None
+                return loop.run_until_complete(target)
+            finally:
+                loop.close()
 
-        return None
+        # A loop is running; try nest_asyncio to allow nesting
+        try:
+            import nest_asyncio  # type: ignore
+            nest_asyncio.apply()
+            return loop.run_until_complete(target)
+        except Exception as inner:
+            raise RuntimeError(
+                "run_sync was called inside a running event loop. "
+                "Please use 'await self.run(...)' instead."
+            ) from inner
 
 class BotManager:
 
@@ -377,12 +274,6 @@ class BotManager:
 
         elif isinstance(default_model, dict):
             self.agent = self.get_agent( default_model )
-
-    def get_info( self, model_name: Optional[str] = None):
-        model_data = self._load_from_sources( model_name)
-        if model_data:
-            return self.get_agent( parser.parse_to_json( model_data) ).get_info()
-        return self.agent.get_info() if self.agent else f"<p>info not found</p>"
 
     def get_agent( self, bot_definition: Union[str, dict] ):
 
@@ -415,7 +306,7 @@ class BotManager:
 
         agent_kwargs = {
             "botmark_json": bot_json,
-            "model": TestModel()
+            #"model": TestModel()
         }
 
         agent = BotMarkAgent(**agent_kwargs)
